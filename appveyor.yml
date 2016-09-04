@@ -1,6 +1,7 @@
 environment:
 
   global:
+    LANDLAB_LOG_LEVEL: 40
     # PYTHON: "C:\\conda"
     # MINICONDA_VERSION: "3.5.5"
     WITH_COMPILER: "cmd /E:ON /V:ON /C .\\.ci\\appveyor\\run_with_env.cmd"
