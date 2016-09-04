@@ -5,7 +5,7 @@ from __future__ import print_function
 
 import os
 import sys
-from textwrap import TextWrapper
+import textwrap
 from itertools import groupby
 
 
@@ -26,7 +26,7 @@ PREFIX = {
 }
 
 
-wrapper = TextWrapper()
+wrapper = textwrap.TextWrapper()
 
 
 def log_level():
@@ -41,12 +41,12 @@ def log_level():
 
 
 def paragraphs(msg):
-    """Split a string into paragraphs.
+    """Iterate over paragraphs of a string.
 
     Parameters
     ----------
     msg : str
-        The string to split.
+        The string to split into paragraphs.
 
     Yields
     ------
@@ -59,21 +59,85 @@ def paragraphs(msg):
             yield ''.join(line_iteration)
 
 
+def dedent_paragraph(para):
+    """Remove common leading whitespace from a paragraph.
+
+    Parameters
+    ----------
+    para : str
+        A paragraph.
+
+    Returns
+    -------
+    str
+        The dedented paragraph.
+    """
+    lines = para.splitlines()
+    dedented = os.linesep.join([
+        lines[0].strip(),
+        textwrap.dedent(os.linesep.join(lines[1:]))
+    ])
+    return wrapper.fill(dedented)
+
+
+def pretty_paragraphs(msg):
+    """Make paragraphs look pretty.
+
+    Parameters
+    ----------
+    msg : str
+        String containing paragraphs.
+
+    Returns
+    -------
+    list or str
+        A list of the paragraph strings.
+    """
+    return [dedent_paragraph(p) for p in paragraphs(msg)]
+
+
 def prettify_message(lvl, msg, long=None):
+    """Make a log message pretty.
+
+    Parameters
+    ----------
+    lvl : int
+        Log level.
+    msg : str
+        The short log message.
+    long : str, optional
+        A longer message to print after the brief message.
+
+    Returns
+    -------
+    str
+        The pretty log message.
+    """
     try:
         prefix = PREFIX[lvl]
     except KeyError:
         raise ValueError('log level not understood')
+
     short = '{prefix}: {msg}'.format(prefix=PREFIX[lvl], msg=msg)
     if long:
         blankline = os.linesep * 2
-        return blankline.join([short] +
-                              [wrapper.fill(p) for p in paragraphs(long)])
+        return blankline.join([short] + pretty_paragraphs(long))
     else:
         return short
 
 
 def log(lvl, msg, long=None):
+    """Print a message with a log level.
+
+    Parameters
+    ----------
+    lvl : int
+        Log level.
+    msg : str
+        The short log message.
+    long : str, optional
+        A longer message to print after the brief message.
+    """
     if lvl >= log_level():
         print(prettify_message(lvl, msg, long=long), file=sys.stderr)
 
@@ -86,7 +150,7 @@ def error(msg, long=None):
     return log(ERROR, msg, long=long)
 
 
-def warn(msg, long=None):
+def warning(msg, long=None):
     return log(WARNING, msg, long=long)
 
 
