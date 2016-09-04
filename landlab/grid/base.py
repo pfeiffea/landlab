@@ -469,7 +469,6 @@ True
 
 import numpy
 import numpy as np
-import warnings
 from time import time
 
 import six
@@ -484,6 +483,7 @@ from landlab.field.scalar_data_fields import FieldError
 from . import grid_funcs as gfuncs
 from ..core.utils import as_id_array
 from ..core.utils import add_module_functions_to_class
+from ..core.log import warning
 from .decorators import (override_array_setitem_and_reset, return_id_array,
                          return_readonly_id_array)
 
@@ -3640,7 +3640,7 @@ class ModelGrid(ModelDataFieldsMixIn):
                 (fromnode_status[already_fixed] == CORE_NODE),
                 FIXED_GRADIENT_BOUNDARY,
                 tonode_status[already_fixed])
-            warnings.warn("""
+            warning("Resetting the status of some nodes.", long="""
                   Remember, fixed_links are dominant over node statuses.
                   Your grid may have had an incompatibility between
                   fixed_links and closed nodes, which has been resolved by

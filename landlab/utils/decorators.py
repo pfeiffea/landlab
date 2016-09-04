@@ -13,7 +13,6 @@ General Landlab decorators
 """
 
 import os
-import warnings
 from functools import wraps
 import textwrap
 
@@ -21,6 +20,7 @@ import numpy as np
 import six
 
 from ..core.model_parameter_loader import load_params
+from ..core.log import warning
 
 
 class store_result_in_grid(object):
@@ -117,10 +117,12 @@ def use_file_name_or_kwds(func):
             raise ValueError('first argument must be a ModelGrid')
 
         if len(args) == 2:
-            warnings.warn(
-                "Passing a file to a component's __init__ method is "
-                "deprecated. Instead, pass parameters as keywords.",
-                category=DeprecationWarning)
+            warning("DEPRECATED: Old-style __init__.",
+                long="""
+                Passing a file to a component's __init__ method is
+                deprecated. Instead, pass parameters as keywords.
+                """
+            )
 
             if os.path.isfile(args[1]):
                 with open(args[1], 'r') as fp:
@@ -313,9 +315,8 @@ def deprecated(use, version):
             if func.__name__.startswith('_'):
                 pass
             else:
-                warnings.warn(
-                    message="Call to deprecated function {name}.".format(
-                        name=func.__name__), category=DeprecationWarning)
+                warning("Call to deprecated function {name}.".format(
+                        name=func.__name__))
             return func(*args, **kwargs)
         _wrapped.__dict__.update(func.__dict__)
 
