@@ -11,9 +11,6 @@
 
 from __future__ import absolute_import
 
-__version__ = '1.0.2'
-
-
 import os
 if 'DISPLAY' not in os.environ:
     try:
@@ -44,3 +41,7 @@ __all__ = ['ModelParameterDictionary', 'MissingKeyError',
            'ParameterValueError', 'Component', 'Palette', 'Arena',
            'NoProvidersError', 'Implements', 'ImplementsOrRaise',
            'Framework', 'FieldError', 'LandlabTester', 'load_params']
+
+from ._version import get_versions
+__version__ = get_versions()['version']
+del get_versions

@@ -11,6 +11,9 @@ from distutils.extension import Extension
 
 import sys
 
+import versioneer
+
+
 ext_modules = [
     Extension('landlab.ca.cfuncs',
               ['landlab/ca/cfuncs.pyx']),
@@ -121,7 +124,7 @@ import os
 
 
 setup(name='landlab',
-      version=__version__,
+      version=versioneer.get_version(),
       author='Eric Hutton',
       author_email='eric.hutton@colorado.edu',
       url='https://github.com/landlab',
@@ -153,10 +156,9 @@ setup(name='landlab',
       package_data={'': ['tests/*txt', 'data/*asc', 'data/*nc',
                          'preciptest.in']},
       test_suite='nose.collector',
-      cmdclass={
-          'install': install_and_register,
-          'develop': develop_and_register,
-      },
+      cmdclass=versioneer.get_cmdclass(
+          {'install': install_and_register,
+           'develop': develop_and_register, }),
       entry_points={
           'console_scripts': [
               'landlab=landlab.cmd.landlab:main',
