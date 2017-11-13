@@ -41,7 +41,7 @@ install:
 - hash -r
 - conda config --set always_yes yes --set changeps1 no
 - conda install python=$TRAVIS_PYTHON_VERSION
-- conda install -q conda-build anaconda-client coverage sphinx
+- conda install -q conda-build anaconda-client coverage sphinx numpy
 - pip install coveralls
 - conda info -a && conda list
 script:
