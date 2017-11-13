@@ -77,8 +77,6 @@ ext_modules = [
 
 import numpy as np
 
-from landlab import __version__
-
 
 def register(**kwds):
     import httplib, urllib
@@ -96,7 +94,7 @@ def register_landlab():
         import platform
         data = {
             'name': 'landlab',
-            'version': __version__,
+            'version': versioneer.get_version(),
             'platform': platform.platform(),
             'desc': ';'.join(argv),
         }
