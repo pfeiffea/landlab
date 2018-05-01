@@ -235,14 +235,6 @@ The Component base class
 
   landlab.core.model_component
 
-ItemCollection
-==============
-
-.. toctree::
-  :maxdepth: 4
-
-  landlab.item_collection
-
 Input/Output (IO)
 =================
 
