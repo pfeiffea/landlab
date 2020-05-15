@@ -39,8 +39,8 @@ _REQUIRED_PARCEL_ATTRIBUTES = [
 _ACTIVE = 1
 _INACTIVE = 0
 
-_SAND_SIZE = 0.002
-_INIT_ACTIVE_LAYER_THICKNESS = 0.03116362
+_SAND_SIZE = 0.002 #m
+_INIT_ACTIVE_LAYER_THICKNESS = 0.03116362 #m
 
 
 class NetworkSedimentTransporter(Component):
@@ -1146,13 +1146,13 @@ def _calculate_parcel_volume_post_abrasion(
 
     """
     
-    if starting_diameter > 0.002: # gravel: greater than 2 mm
+    if starting_diameter > _SAND_SIZE: #gravel
 
         abraded_volume = starting_volume * np.exp(
             travel_distance * (-abrasion_rate_gravel)
             )
 
-    elif starting_diameter <= 0.002: #sand: less than or equal to 2 mm
+    elif starting_diameter <= _SAND_SIZE: #sand
            
         abrasion_rate_sand = 0 # this can be defined earlier on and passed in.
         # defined in this elif statement so it is only created if necessary
