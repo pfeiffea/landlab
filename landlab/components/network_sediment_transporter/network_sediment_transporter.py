@@ -895,6 +895,7 @@ class NetworkSedimentTransporter(Component):
         # reduce D and volume due to abrasion
         vol = _calculate_parcel_volume_post_abrasion(
             self._parcels.dataset.volume[active_parcel_ids, self._time_idx],
+            self._parcels.dataset.D[active_parcel_ids, self._time_idx],
             distance_to_travel_this_timestep[active_parcel_ids],
             self._parcels.dataset.abrasion_rate[active_parcel_ids],
         )
@@ -1113,7 +1114,10 @@ def _calculate_reference_shear_stress(
 
 
 def _calculate_parcel_volume_post_abrasion(
-    starting_volume, travel_distance, abrasion_rate
+    starting_volume, 
+    starting_diameter, 
+    travel_distance, 
+    abrasion_rate_gravel, 
 ):
     """Calculate parcel volumes after abrasion, according to Sternberg
     exponential abrasion.
@@ -1122,12 +1126,14 @@ def _calculate_parcel_volume_post_abrasion(
     ----------
     starting_volume : float or array
         Starting volume of each parcel.
+    starting_diameter : float or array
+        Starting diameter of each parcel.
     travel_distance: float or array
-        Travel distance for each parcel during this timestep, in ___.
-    abrasion_rate: float or array
-        Mean grain size of the 'active' sediment parcels.
+        Travel distance for each parcel during this timestep, in meters.
+    abrasion_rate_gravel: float or array
+        Abrasion rate for gravel, in mass loss per meter.
 
-    Examples
+    Examples UPDATE UPDATE!! Will break examples because D expected!
     --------
     >>> from landlab.components.network_sediment_transporter.network_sediment_transporter import _calculate_parcel_volume_post_abrasion
     >>> import pytest
@@ -1139,13 +1145,30 @@ def _calculate_parcel_volume_post_abrasion(
     ...     _calculate_parcel_volume_post_abrasion(10,300,-3)
 
     """
+    
+    if starting_diameter > 0.002: # gravel: greater than 2 mm
 
-    volume = starting_volume * np.exp(travel_distance * (-abrasion_rate))
+        abraded_volume = starting_volume * np.exp(
+            travel_distance * (-abrasion_rate_gravel)
+            )
 
-    if np.any(volume > starting_volume):
+    elif starting_diameter <= 0.002: #sand: less than or equal to 2 mm
+           
+        abrasion_rate_sand = 0 # this can be defined earlier on and passed in.
+        # defined in this elif statement so it is only created if necessary
+        
+        abraded_volume = starting_volume * np.exp(
+            travel_distance * (-abrasion_rate_sand)
+            )
+
+    else:
+        msg = "Parcel diameter not recognized for abrasion"
+        raise RuntimeError(msg)
+                        
+    if np.any(abraded_volume > starting_volume):
         raise ValueError("NST parcel volume *increases* due to abrasion")
 
-    return volume
+    return abraded_volume
 
 
 def _calculate_parcel_grain_diameter_post_abrasion(
@@ -1157,7 +1180,7 @@ def _calculate_parcel_grain_diameter_post_abrasion(
     Parameters
     ----------
     starting_diameter : float or array
-        Starting volume of each parcel.
+        Starting diameter of each parcel.
     pre_abrasion_volume: float or array
         Parcel volume before abrasion.
     post_abrasion_volume: float or array
