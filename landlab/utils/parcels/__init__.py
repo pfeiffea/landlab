@@ -1,4 +1,6 @@
+from .bed_parcel_initializer import (
+    BedParcelInitializer
+)
 from .parcel import SedimentPulser
 
-
-__all__ = ["make_sediment"]
+__all__ = ["BedParcelInitializer","make_sediment"]
