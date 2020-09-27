@@ -109,18 +109,27 @@ class BedParcelInitializer:
             msg = "NetworkSedimentTransporter: grid must be NetworkModelGrid"
             raise ValueError(msg)
 
-    def __call__(self, discharge_at_link):
-        d50 = calc_d50_grain_size(
-            discharge_at_link,
-            self._grid.at_link["channel_width"],
-            self._grid.at_link["channel_slope"],
-            mannings_n=self._mannings_n,
-            gravity=self._gravity,
-            rho_water=self._rho_water,
-            rho_sediment=self._rho_sediment,
-            tau_50=self._tau_50,
-
-        )
+    def __call__(self, discharge_at_link=None,user_parcel_volume=None,
+                 user_d50=None):
+        
+        if discharge_at_link is not None: # d50 = f(dominant discharge)
+            d50 = calc_d50_grain_size(
+                discharge_at_link,
+                self._grid.at_link["channel_width"],
+                self._grid.at_link["channel_slope"],
+                mannings_n=self._mannings_n,
+                gravity=self._gravity,
+                rho_water=self._rho_water,
+                rho_sediment=self._rho_sediment,
+                tau_50=self._tau_50,    
+            )
+        elif user_d50 is not None: # d50 = f(contributing area) or d50 = constant             
+            d50 = calc_d50_grain_size_hydraulic_geometry(user_d50,
+                                                         self._grid.at_link["drainage_area"])
+        else:
+            msg = "D50 not specified"
+            raise ValueError(msg)          
+        
         self.D50 = d50
         d84 = d50 * self._std_dev
 
@@ -137,11 +146,14 @@ class BedParcelInitializer:
         variables, items = _parcel_characteristics(
             total_parcel_volume_at_link,
             max_parcel_volume,
+            self._median_number_of_starting_parcels,
             d50,
             self._std_dev,
             self._rho_sediment,
             self._abrasion_rate,
-            self._extra_parcel_attributes
+            self._extra_parcel_attributes,
+            user_parcel_volume,
+            user_d50
         )
 
         if np.min(self._sed_thickness) < 0.05:
@@ -196,13 +208,29 @@ class BedParcelInitializer:
 def _parcel_characteristics(
     total_parcel_volume_at_link,
     max_parcel_volume,
+    median_number_of_starting_parcels,
     d50,
     std_dev,
     rho_sediment,
     abrasion_rate,
-    extra_parcel_attributes
+    extra_parcel_attributes,
+    user_parcel_volume=None,
+    user_d50=None
 ):
-    n_parcels_at_link = np.ceil(total_parcel_volume_at_link / max_parcel_volume).astype(dtype=int)
+
+    # check for user specified parcel volume
+    
+    if user_parcel_volume is not None:
+        n_parcels_at_link = (median_number_of_starting_parcels*
+                             np.ones(len(d50))).astype(dtype=int)
+        parcel_volume = user_parcel_volume
+        total_parcel_volume_at_link = (median_number_of_starting_parcels*
+                                       parcel_volume*np.ones(len(d50))).astype(dtype=int)
+    else:
+        n_parcels_at_link = np.ceil(total_parcel_volume_at_link / 
+                                    max_parcel_volume).astype(dtype=int)
+        parcel_volume = max_parcel_volume
+        
     if np.min(n_parcels_at_link) <10:
         msg =(
         "BedParcelInitializer: At least one link has only "
@@ -213,7 +241,7 @@ def _parcel_characteristics(
     element_id = np.empty(np.sum(n_parcels_at_link), dtype=int)
 
     # volume = np.full(np.sum(n_parcels_at_link), max_parcel_volume, dtype=float)
-    volume = np.full_like(element_id, max_parcel_volume, dtype=float)
+    volume = np.full_like(element_id, parcel_volume, dtype=float)
     grain_size = np.empty_like(element_id, dtype=float)
     offset = 0
     for link, n_parcels in enumerate(n_parcels_at_link):
@@ -223,7 +251,7 @@ def _parcel_characteristics(
         )
         volume[offset] = (
                         total_parcel_volume_at_link[link]
-                        - ((n_parcels-1)*max_parcel_volume)
+                        - ((n_parcels-1)*parcel_volume)
                         ) # small remaining volume
 
         offset += n_parcels
@@ -297,3 +325,40 @@ def calc_d50_grain_size(
     ) / (
         (rho_sediment - rho_water) * gravity * tau_50
     )
+
+def calc_d50_grain_size_hydraulic_geometry(user_d50,drainage_area):
+    '''   
+    Parameters
+    ----------
+    user_d50 : list
+        TYPE: list of length 1 or 2
+        list of length 1: value D50 of all links in the network
+        list of length 2: the first value is the coefficient, the second
+            value is the exponent of a hydraulic geomtry relation between D50 and 
+            grid.at_link.drainage_area. 
+
+    Raises
+    ------
+    ValueError
+        if user_d50 is not a list or length 1 or 2, .
+
+    Returns
+    -------
+    ndarray of float
+        d50.
+
+    '''
+        
+    if (type(user_d50) == list) and (len(user_d50)<=2) and (len(user_d50)>0):
+
+        if len(user_d50) == 2: # specified contributing area and d50 relation
+            a = user_d50[0]
+            n = user_d50[1]
+            d50  = a*drainage_area**n
+        if len(user_d50) == 1: # d50 is constance across basin
+            d50 = np.full_like(element_id, user_d50[0], dtype=float)
+    else:
+        msg = "user defined D50 must be a list of length 1 or 2"
+        raise ValueError(msg)
+        
+    return d50
