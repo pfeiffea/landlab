@@ -499,7 +499,14 @@ class NetworkSedimentTransporter(Component):
             parcel_D = self._parcels.dataset.D.values[mask_here & mask_active,-1] 
 
             self._d50_active[link] = calculate_x_percentile_grain_size(parcel_vol,parcel_D,50)
-
+            
+        if np.any(np.asarray(self._d50_active < 0)):
+            
+            raise ValueError(
+                "NetworkSedimentTransporter: a calculated grain size is negative"
+                + " D_50= "
+                + str(self._d50_active)
+            )
 
     def _partition_active_and_storage_layers(self) -> None:
         """For each parcel in the network, determines whether it is in the
@@ -1286,6 +1293,8 @@ def _calculate_reference_shear_stress(
     if np.any(np.asarray(taursg < 0)):
         raise ValueError(
             "NetworkSedimentTransporter: Reference Shields stress is negative"
+            + " taursg = "
+            + str(taursg)
         )
 
     return taursg
@@ -1493,17 +1502,21 @@ def calculate_x_percentile_grain_size(D_array,vol_array,percentile):
         vol_sorted_by_D = vol_array[idx_Dsort]
         cum_vol_sorted_by_D = np.cumsum(vol_sorted_by_D)
         vol_percentile = cum_vol_sorted_by_D/np.max(cum_vol_sorted_by_D)
-    
-        two_closest_D = D_sorted[np.argsort(np.abs(vol_percentile-(percentile/100)))[:2]]
-        two_closest_percentile = vol_percentile[np.argsort(np.abs(vol_percentile-(percentile/100)))[:2]]
-
+        
+        vol_perc_shift = np.zeros_like(vol_percentile)
+        vol_perc_shift[1:]=vol_percentile[:-1]
+        
+        vol_mid_percentile = (vol_percentile+vol_perc_shift)/2 # take the mid-point of the percentile calc. 
+        two_closest_D = D_sorted[np.argsort(np.abs(vol_mid_percentile-(percentile/100)))[:2]]
+        two_closest_percentile = vol_mid_percentile[np.argsort(np.abs(vol_mid_percentile-(percentile/100)))[:2]]
+        
         D_x = ((two_closest_D[1]-two_closest_D[0])
                 *(((percentile/100)-two_closest_percentile[0])
                 /(two_closest_percentile[1]-two_closest_percentile[0]))
                 + two_closest_D[0]
                 ) # Bunte and Abt (2001) Eqn 2.15
     
-    elif D_array.size == 1: # if just one parcel, median is that D
+    elif D_array.size == 1:
         D_x = D_array[0]
         
     else: 
