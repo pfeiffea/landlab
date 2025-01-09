@@ -727,7 +727,7 @@ class DataRecord:
 
         number_of_new_items = len(new_item["element_id"])
         # first id of new item = last item in existing datarecord+1
-        new_first_item_id = self._dataset["item_id"][-1].values + 1
+        new_first_item_id = np.int64(self._dataset["item_id"][-1].values + 1)
         new_item_ids = np.array(
             range(new_first_item_id, new_first_item_id + number_of_new_items)
         )
