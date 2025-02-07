@@ -498,7 +498,7 @@ class NetworkSedimentTransporter(Component):
             parcel_vol = self._parcels.dataset.volume.values[mask_here & mask_active,-1]
             parcel_D = self._parcels.dataset.D.values[mask_here & mask_active,-1] 
 
-            self._d50_active[link] = calculate_x_percentile_grain_size(parcel_vol,parcel_D,50)
+            self._d50_active[link] = calculate_x_percentile_grain_size(parcel_D,parcel_vol,50)
             
         if np.any(np.asarray(self._d50_active < 0)):
             
@@ -912,6 +912,8 @@ class NetworkSedimentTransporter(Component):
 
         b = 0.67 / (1.0 + np.exp(1.5 - Darray / D50_activearray))
 
+        #b = 0 # sensitivity analysis 11/3/24 AP for CSDMS talk
+
         tau = self._fluid_density * self._g * Harray * Sarray
         tau = np.atleast_1d(tau)
 
@@ -1095,7 +1097,7 @@ class NetworkSedimentTransporter(Component):
         # arrival time in link
         self._parcels.dataset.time_arrival_in_link[
             active_parcel_ids, self._time_idx
-        ] = self._time_idx
+        ] = self._time_idx # XX should edit to add rng uniform here..
 
         # location in link
         self._parcels.dataset.location_in_link[active_parcel_ids, self._time_idx] = (
@@ -1143,7 +1145,7 @@ class NetworkSedimentTransporter(Component):
         if self._this_timesteps_parcels.any():
             self._partition_active_and_storage_layers()
             self._adjust_node_elevation()
-            self._update_channel_slopes()
+            self._update_channel_slopes() 
             self._update_transport_time()
             self._move_parcel_downstream(dt)
 
