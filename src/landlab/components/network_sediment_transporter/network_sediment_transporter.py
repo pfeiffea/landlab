@@ -1509,14 +1509,20 @@ def calculate_x_percentile_grain_size(D_array,vol_array,percentile):
         vol_perc_shift[1:]=vol_percentile[:-1]
         
         vol_mid_percentile = (vol_percentile+vol_perc_shift)/2 # take the mid-point of the percentile calc. 
-        two_closest_D = D_sorted[np.argsort(np.abs(vol_mid_percentile-(percentile/100)))[:2]]
-        two_closest_percentile = vol_mid_percentile[np.argsort(np.abs(vol_mid_percentile-(percentile/100)))[:2]]
         
-        D_x = ((two_closest_D[1]-two_closest_D[0])
-                *(((percentile/100)-two_closest_percentile[0])
-                /(two_closest_percentile[1]-two_closest_percentile[0]))
-                + two_closest_D[0]
-                ) # Bunte and Abt (2001) Eqn 2.15
+        percentile_below = max([val for val in vol_mid_percentile if val <= percentile / 100])
+        percentile_above = min([val for val in vol_mid_percentile if val > percentile / 100])
+        
+        # Get corresponding grain sizes for below and above percentiles
+        D_below = D_sorted[np.where(vol_mid_percentile == percentile_below)[0][0]]
+        D_above = D_sorted[np.where(vol_mid_percentile == percentile_above)[0][0]]
+        
+        # Interpolate to calculate the desired percentile grain size (D_x)
+        D_x = ((D_above - D_below) *
+               (((percentile / 100) - percentile_below) /
+                (percentile_above - percentile_below)) +
+               D_below
+               )  # Bunte and Abt (2001) Eqn 2.15
     
     elif D_array.size == 1:
         D_x = D_array[0]
