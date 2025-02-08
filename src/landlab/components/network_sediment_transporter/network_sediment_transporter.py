@@ -1092,12 +1092,13 @@ class NetworkSedimentTransporter(Component):
             vol,
         )
 
-        # update parcel attributes
-
-        # arrival time in link
+        # update parcel attributes 
+        # arrival time in link - "shuffle" active layer by adding random
         self._parcels.dataset.time_arrival_in_link[
             active_parcel_ids, self._time_idx
-        ] = self._time_idx # XX should edit to add rng uniform here..
+        ] = (self._time_idx 
+            + np.random.uniform(size=np.size(active_parcel_ids))
+        )
 
         # location in link
         self._parcels.dataset.location_in_link[active_parcel_ids, self._time_idx] = (
@@ -1511,12 +1512,17 @@ def calculate_x_percentile_grain_size(D_array,vol_array,percentile):
         vol_mid_percentile = (vol_percentile+vol_perc_shift)/2 # take the mid-point of the percentile calc. 
         
         percentile_below = max([val for val in vol_mid_percentile if val <= percentile / 100])
-        percentile_above = min([val for val in vol_mid_percentile if val > percentile / 100])
-        
-        # Get corresponding grain sizes for below and above percentiles
         D_below = D_sorted[np.where(vol_mid_percentile == percentile_below)[0][0]]
-        D_above = D_sorted[np.where(vol_mid_percentile == percentile_above)[0][0]]
         
+        percentile_above_vals = [val for val in vol_mid_percentile if val > percentile / 100]
+
+        if not percentile_above_vals: # If no values above, use the largest available value
+            percentile_above = np.max(vol_mid_percentile)
+            D_above = D_sorted[np.where(vol_mid_percentile == percentile_above)[0][0]]
+        else:
+            percentile_above = min(percentile_above_vals)
+            D_above = D_sorted[np.where(vol_mid_percentile == percentile_above)[0][0]]
+
         # Interpolate to calculate the desired percentile grain size (D_x)
         D_x = ((D_above - D_below) *
                (((percentile / 100) - percentile_below) /
