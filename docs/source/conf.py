@@ -275,6 +275,7 @@ autodoc_mock_imports = [
     "pandas",
     "pyshp",
     "pyyaml",
+    "requireit",
     "rich-click",
     "scipy",
     "statsmodels",
