@@ -26,8 +26,8 @@ Mapping functions unique to raster grids
 import numpy as np
 from numpy.typing import ArrayLike
 from numpy.typing import NDArray
+from requireit import require_array
 
-from landlab.core._validate import validate_array
 from landlab.grid.ext.raster_mappers import (
     map_max_of_link_nodes_to_link as _map_max_of_link_nodes_to_link,
 )
@@ -195,12 +195,12 @@ def map_max_of_link_nodes_to_link(
     else:
         value_at_node = np.asarray(value_at_node)
 
-    value_at_node = validate_array(value_at_node.ravel(), shape=(grid.number_of_nodes,))
+    value_at_node = require_array(value_at_node.ravel(), shape=(grid.number_of_nodes,))
 
     if out is None:
         out = grid.empty(at="link", dtype=value_at_node.dtype)
 
-    out = validate_array(
+    out = require_array(
         out,
         shape=(grid.number_of_links,),
         dtype=value_at_node.dtype,

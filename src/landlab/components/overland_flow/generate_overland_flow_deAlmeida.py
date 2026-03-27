@@ -89,6 +89,9 @@ array([0. , 0. , 0. , 0. ,
 import numpy as np
 import scipy.constants
 from numpy.typing import NDArray
+from requireit import require_between
+from requireit import require_nonnegative
+from requireit import require_positive
 
 from landlab import Component
 from landlab.components.overland_flow._calc import adjust_supercritical_discharge
@@ -109,9 +112,6 @@ from landlab.components.overland_flow._links import nth_vertical_link
 from landlab.components.overland_flow._links import vertical_active_link_ids
 from landlab.components.overland_flow._links import vertical_north_link_neighbor
 from landlab.components.overland_flow._links import vertical_south_link_neighbor
-from landlab.core._validate import require_between
-from landlab.core._validate import require_nonnegative
-from landlab.core._validate import require_positive
 from landlab.core.errors import Error
 from landlab.grid.linkstatus import LinkStatus
 
@@ -311,8 +311,8 @@ class OverlandFlow(Component):
 
         super().__init__(grid)
 
-        self._h_init = require_nonnegative(h_init)
-        self._alpha = require_positive(alpha)
+        self._h_init = require_nonnegative(h_init, name="h_init")
+        self._alpha = require_positive(alpha, name="alpha")
 
         if isinstance(mannings_n, str):
             self._mannings_n = mannings_n
@@ -322,11 +322,13 @@ class OverlandFlow(Component):
                 requirements=("C_CONTIGUOUS",),
             )
 
-        self._g = require_positive(g)
+        self._g = require_positive(g, name="g")
         self._theta = require_between(
-            theta, 0.0, 1.0, inclusive_min=True, inclusive_max=True
+            theta, 0.0, 1.0, inclusive_min=True, inclusive_max=True, name="theta"
         )
-        self.rainfall_intensity = require_nonnegative(rainfall_intensity)
+        self.rainfall_intensity = require_nonnegative(
+            rainfall_intensity, name="rainfall_intensity"
+        )
         self._steep_slopes = steep_slopes
 
         grid.at_link["surface_water__discharge"].fill(0.0)

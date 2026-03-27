@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 from numpy.testing import assert_almost_equal
 from numpy.testing import assert_equal
+from requireit import ValidationError
 
 from landlab import RasterModelGrid
 from landlab.components.overland_flow import OverlandFlow
@@ -15,7 +16,6 @@ from landlab.components.overland_flow._links import horizontal_link_ids
 from landlab.components.overland_flow.generate_overland_flow_deAlmeida import (
     NoWaterError,
 )
-from landlab.core.errors import ValidationError
 from landlab.grid.nodestatus import NodeStatus
 
 (_SHAPE, _SPACING, _ORIGIN) = ((32, 240), (25, 25), (0.0, 0.0))
