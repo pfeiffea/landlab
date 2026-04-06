@@ -1,2 +1,0 @@
-Refactored functions in the jaggedarray extension module for speed
-and removed fused types for index arrays.
