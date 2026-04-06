@@ -29,16 +29,16 @@ class StreamPowerSmoothThresholdEroder(FastscapeEroder):
     ----------
     grid : ModelGrid
         A grid.
-    K_sp : float, ndarray, or str
+    K_sp : float, array, or field name
         K in the stream power equation (units vary with other parameters).
     m_sp : float, optional
         m in the stream power equation (power on drainage area).
     n_sp : float, optional, ~ 0.5<n_sp<4.
         n in the stream power equation (power on slope). NOTE: NOT PRESENTLY
         HONORED BY StreamPowerSmoothThresholdEroder (TODO)
-    threshold_sp : float
+    threshold_sp : float (TODO: array, or field name)
         The threshold stream power.
-    discharge_field : float, str, or ndarray, optional
+    discharge_field : float, field name, or array, optional
         Discharge [L^2/T]. The default is to use the grid field
         'drainage_area'. To use custom spatially/temporally varying
         rainfall, use 'water__unit_flux_in' to specify water input to the

@@ -148,8 +148,8 @@ class SoilInfiltrationGreenAmpt(Component):
         ----------
         grid : RasterModelGrid
             A grid.
-        hydraulic_conductivity : float, ndarray, or str
-            The soil effective hydraulic conductivity [m/s].
+        hydraulic_conductivity : float, array, or field name (m/s)
+            The soil effective hydraulic conductivity.
         soil_bulk_density : float (kg/m**3)
             The dry bulk density of the soil.
         rock_density : float (kg/m**3)
@@ -270,18 +270,18 @@ class SoilInfiltrationGreenAmpt(Component):
 
         Parameters
         ----------
-        soil_bulk_density : float or ndarray of float
+        soil_bulk_density : float or array of float
             Bulk density of the soil [kg / m3].
-        rock_density : float or ndarray of float
+        rock_density : float or array of float
             Density of rock [kg / m3].
-        volume_fraction_coarse_fragments : float or ndarray of float
+        volume_fraction_coarse_fragments : float or array of float
             Volume fraction of sediment made up of coarse grains [-].
-        soil_moisture_content : float or ndarray of float
+        soil_moisture_content : float or array of float
             Fraction of soil filled with water [-].
 
         Returns
         -------
-        float or ndarray of float
+        float or array of float
             Moisture deficit.
         """
         if np.any(soil_bulk_density <= 0.0):

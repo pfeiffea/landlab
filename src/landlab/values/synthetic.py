@@ -127,11 +127,11 @@ def _where_to_add_values(grid, at, where):
 
     Parameters
     ----------
-    grid : ModelGrid
+    grid : ModelGrid-like
         A landlab ModelGrid.
     at : str
         Name of location where values are defined.
-    where : array_like or str or int, optional
+    where : array-like or str or int or None
         Ids where values are to be placed. If *None*, values will
         be placed on all elements. If *str*, *int* or list of *str* or *int*,
         *where* is interpreted as a boundary condition.
@@ -209,7 +209,7 @@ def random(grid, name, at="node", where=None, distribution="uniform", **kwargs):
 
     Returns
     -------
-    values : ndarray
+    values : array
         Array of the values added to the field.
 
     Examples
@@ -275,7 +275,7 @@ def plane(
 
     Returns
     -------
-    values : ndarray
+    values : array
         Array of the values added to the field.
 
     Examples
@@ -363,7 +363,7 @@ def constant(grid, name, at="node", where=None, value=0.0, dtype=None):
 
     Returns
     -------
-    values : ndarray
+    values : array
         Array of the values added to the field.
 
     Examples
@@ -431,7 +431,7 @@ def sine(
 
     Returns
     -------
-    values : ndarray
+    values : array
         Array of the values added to the field.
 
     Examples

@@ -57,10 +57,10 @@ def depth_dependent_mannings_n(
 
     Parameters
     ----------
-    grid : RasterModelGrid
+    grid : A Landlab RasterModelGrid instance
         A Landlab grid - only works with RasterModelGrid instances as of
         1/31/17.
-    water_depths : ndarray or str
+    water_depths : array or Landlab field of floats
         Array of values, with length of number of nodes, water depths
         at all grid node locations. (m)
     min_mannings_n : float

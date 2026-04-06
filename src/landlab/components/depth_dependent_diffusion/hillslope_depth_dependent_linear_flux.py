@@ -261,7 +261,7 @@ class DepthDependentDiffuser(Component):
         Parameters
         ----------
 
-        dt: float
+        dt: float (time)
             The imposed timestep.
         """
 
@@ -315,7 +315,7 @@ class DepthDependentDiffuser(Component):
 
         Parameters
         ----------
-        dt: float
+        dt: float (time)
             The imposed timestep.
         """
 

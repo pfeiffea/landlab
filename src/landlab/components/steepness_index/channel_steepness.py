@@ -298,12 +298,12 @@ class SteepnessFinder(Component):
 
         Parameters
         ----------
-        ch_nodes : ndarray of int
+        ch_nodes : array of ints
             The nodes along a single defined flow path, starting upstream.
 
         Returns
         -------
-        ch_dists : ndarray of float
+        ch_dists : array of floats
             Distances downstream from top node of ch_nodes.
 
         Examples
@@ -343,17 +343,17 @@ class SteepnessFinder(Component):
 
         Parameters
         ----------
-        ch_nodes : ndarray of int
+        ch_nodes : array of ints
             The nodes along a single defined flow path, starting upstream.
-        ch_dists : ndarray of float
+        ch_dists : array of floats
             Distances downstream from top node of ch_nodes.
-        interp_pt_elevs : ndarray of float
+        interp_pt_elevs : array of floats
             Elevations at the discretizing points along the profile, in order
             of increasing elevation.
 
         Returns
         -------
-        ch_S : ndarray of float
+        ch_S : array of floats
             Interpolated slopes at each node in the flowpath (always positive).
 
         Examples
@@ -418,11 +418,11 @@ class SteepnessFinder(Component):
 
         Parameters
         ----------
-        ch_dists : ndarray of float
+        ch_dists : array of floats
             Distances downstream from top node of a single stream path.
-        ch_A : ndarray of float
+        ch_A : array of floats
             Drainage areas at each node in the flowpath.
-        ch_S : ndarray of float
+        ch_S : array of floats
             Slope at each node in the flowpath (defined as positive).
         ref_theta : float
             The reference concavity; must be positive.
@@ -431,7 +431,7 @@ class SteepnessFinder(Component):
 
         Returns
         -------
-        ch_ksn : ndarray of float
+        ch_ksn : array of floats
             The normalized steepness index at each node in the flowpath,
             EXCEPT THE LAST. (i.e., length is (ch_dists.size - 1)). Values
             will be the same within each defined segment.

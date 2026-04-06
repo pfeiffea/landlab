@@ -149,8 +149,9 @@ class HexModelGrid(DualHexGraph, ModelGrid):
                 "orientation": self.orientation,
             },
         )
-        dataset.update(super().as_dataset(include=include, exclude=exclude, time=None))
-        return dataset
+        return dataset.update(
+            super().as_dataset(include=include, exclude=exclude, time=None)
+        )
 
     @property
     def xy_of_lower_left(self):

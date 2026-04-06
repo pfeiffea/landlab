@@ -334,7 +334,7 @@ def sort_graph(nodes, links=None, patches=None):
 
     Returns
     -------
-    tuple of ``(nodes, links, patches)``
+    (nodes, links, patches)
         Sorted nodes, links, and patches.
 
     Examples

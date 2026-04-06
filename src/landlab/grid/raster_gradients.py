@@ -33,7 +33,7 @@ def calc_diff_at_d8(grid, node_values, out=None):
     ----------
     grid : ModelGrid
         A ModelGrid.
-    node_values : ndarray or str
+    node_values : ndarray or field name
         Values at grid nodes.
     out : ndarray, optional
         Buffer to hold the result.
@@ -81,7 +81,7 @@ def calc_diff_at_diagonal(grid, node_values, out=None):
     ----------
     grid : ModelGrid
         A ModelGrid.
-    node_values : ndarray or str
+    node_values : ndarray or field name
         Values at grid nodes.
     out : ndarray, optional
         Buffer to hold the result.
@@ -123,7 +123,7 @@ def calc_grad_at_d8(grid, node_values, out=None):
     ----------
     grid : RasterModelGrid
         A grid.
-    node_values : array_like or str
+    node_values : array_like or field name
         Values at nodes.
     out : ndarray, optional
         Buffer to hold result. If `None`, create a new array.
@@ -158,7 +158,7 @@ def calc_grad_at_diagonal(grid, node_values, out=None):
     ----------
     grid : RasterModelGrid
         A grid.
-    node_values : array_like or str
+    node_values : array_like or field name
         Values at nodes.
     out : ndarray, optional
         Buffer to hold result. If `None`, create a new array.
@@ -192,7 +192,7 @@ def calc_diff_at_link(grid, value_at_node, out=None):
     ----------
     grid : RasterModelGrid
         A grid.
-    value_at_node : array_like or str
+    value_at_node : array_like or field name
         Values at nodes.
     out : ndarray, optional
         Buffer to hold result. If `None`, create a new array.
@@ -245,7 +245,7 @@ def calc_grad_at_link(grid, value_at_node, out=None):
     ----------
     grid : RasterModelGrid
         A grid.
-    value_at_node : array_like or str
+    value_at_node : array_like or field name
         Values at nodes.
     out : ndarray, optional
         Buffer to hold result. If `None`, create a new array.
@@ -305,7 +305,7 @@ def calc_grad_across_cell_faces(grid, node_values, *args, **kwds):
     ----------
     grid : RasterModelGrid
         Source grid.
-    node_values : array_like or str
+    node_values : array_like or field name
         Quantity to take the gradient of defined at each node.
     cell_ids : array_like, optional
         If provided, cell ids to measure gradients. Otherwise, find gradients
@@ -316,7 +316,7 @@ def calc_grad_across_cell_faces(grid, node_values, *args, **kwds):
 
     Returns
     -------
-    Masked ndarray
+    (N, 4) Masked ndarray
         Gradients for each face of the cell.
 
     Examples
@@ -383,7 +383,7 @@ def calc_grad_across_cell_corners(grid, node_values, *args, **kwds):
     ----------
     grid : RasterModelGrid
         Source grid.
-    node_values : array_like or str
+    node_values : array_like or field name
         Quantity to take the gradient of defined at each node.
     cell_ids : array_like, optional
         If provided, cell ids to measure gradients. Otherwise, find gradients
@@ -394,7 +394,7 @@ def calc_grad_across_cell_corners(grid, node_values, *args, **kwds):
 
     Returns
     -------
-    ndarray
+    (N, 4) ndarray
         Gradients to each diagonal node.
 
     Examples
@@ -451,7 +451,7 @@ def calc_grad_along_node_links(grid, node_values, *args, **kwds):
     ----------
     grid : RasterModelGrid
         Source grid.
-    node_values : array_like or str
+    node_values : array_like or field name
         Quantity to take the gradient of defined at each node.
     node_ids : array_like, optional
         If provided, node ids to measure gradients. Otherwise, find gradients
@@ -462,7 +462,7 @@ def calc_grad_along_node_links(grid, node_values, *args, **kwds):
 
     Returns
     -------
-    Masked ndarray
+    (N, 4) Masked ndarray
         Gradients for each link of the node. Ordering is E,N,W,S.
 
     Examples
@@ -635,19 +635,19 @@ def _calc_subtriangle_unit_normals_at_node(grid, elevs="topographic__elevation")
     Parameters
     ----------
     grid : RasterModelGrid
-        A grid.
+    A grid.
     elevs : str or ndarray, optional
-        Field name or array of node values.
+    Field name or array of node values.
 
     Returns
     -------
     (n_ENE, n_NNE, n_NNW, n_WNW, n_WSW, n_SSW, n_SSE, n_ESE) :
-        each a num-nodes x length-3 array
-        Len-8 tuple of the eight unit normal vectors <a, b, c> for the eight
-        subtriangles in the cell. Order is from north of east, counter
-        clockwise to south of east (East North East, North North East, North
-        North West, West North West, West South West, South South West, South
-        South East, East South East).
+    each a num-nodes x length-3 array
+    Len-8 tuple of the eight unit normal vectors <a, b, c> for the eight
+    subtriangles in the cell. Order is from north of east, counter
+    clockwise to south of east (East North East, North North East, North
+    North West, West North West, West South West, South South West, South
+    South East, East South East).
 
     Examples
     --------
@@ -880,7 +880,7 @@ def calc_slope_at_cell_subtriangles(
         A grid.
     elevs : str or ndarray, optional
         Field name or array of node values.
-    subtriangle_unit_normals : tuple of ndarray, optional
+    subtriangle_unit_normals : tuple of 8 (ncells, 3) arrays (optional)
         The unit normal vectors for the eight subtriangles of each cell,
         if already known. Order is from north of east, counter
         clockwise to south of east (East North East, North North East, North
@@ -985,7 +985,8 @@ def _calc_subtriangle_slopes_at_node(
         A grid.
     elevs : str or ndarray, optional
         Field name or array of node values.
-    subtriangle_unit_normals : tuple of ndarray, optional
+    subtriangle_unit_normals : tuple of 8 (ncells, 3) or (nnodes, 3) arrays
+        (optional)
         The unit normal vectors for the eight subtriangles of each cell or
         node,if already known. Order is from north of east, counter
         clockwise to south of east (East North East, North North East, North
@@ -1134,11 +1135,11 @@ def calc_aspect_at_cell_subtriangles(
     ----------
     grid : ModelGrid
         A ModelGrid.
-    elevs : str or ndarray, optional
+    elevs : str or array (optional)
         Node field name or node array of elevations.
         If *subtriangle_unit_normals* is not provided, must be set, but unused
         otherwise.
-    subtriangle_unit_normals : tuple of ndarray, optional
+    subtriangle_unit_normals : tuple of 8 (ncels, 3) arrays (optional)
         The unit normal vectors for the eight subtriangles of each cell,
         if already known. Order is from north of east, counter
         clockwise to south of east (East North East, North North East, North
@@ -1150,7 +1151,7 @@ def calc_aspect_at_cell_subtriangles(
     Returns
     -------
     (a_ENE, a_NNE, a_NNW, a_WNW, a_WSW, a_SSW, a_SSE, a_ESE) :
-        each a length num-cells array
+            each a length num-cells array
         Len-8 tuple of the aspect of each of the eight cell subtriangles.
         Aspect is returned as angle clockwise of north. Units are given as
         radians unless input parameter units is set to 'degrees'.
@@ -1239,11 +1240,12 @@ def _calc_subtriangle_aspect_at_node(
     ----------
     grid : ModelGrid
         A ModelGrid.
-    elevs : str or ndarray, optional
+    elevs : str or array (optional)
         Node field name or node array of elevations.
         If *subtriangle_unit_normals* is not provided, must be set, but unused
         otherwise.
-    subtriangle_unit_normals : tuple of ndarray, optional
+    subtriangle_unit_normals : tuple of 8 (ncells, 3) or (nnodes, 3) arrays
+        (optional)
         The unit normal vectors for the eight subtriangles of each cell or
         node,if already known. Order is from north of east, counter
         clockwise to south of east (East North East, North North East, North
@@ -1255,7 +1257,7 @@ def _calc_subtriangle_aspect_at_node(
     Returns
     -------
     (a_ENE, a_NNE, a_NNW, a_WNW, a_WSW, a_SSW, a_SSE, a_ESE) :
-        each a length num-cells array
+            each a length num-cells array
         Len-8 tuple of the aspect of each of the eight cell subtriangles.
         Aspect is returned as angle clockwise of north. Units are given as
         radians unless input parameter units is set to 'degrees'.
@@ -1433,7 +1435,7 @@ def calc_unit_normals_at_patch_subtriangles(grid, elevs="topographic__elevation"
 
     Returns
     -------
-    (n_TR, n_TL, n_BL, n_BR) :
+    (n_TR, n_TL, n_BL, n_BR) : each a num-patches x length-3 array
         Len-4 tuple of the four unit normal vectors <a, b, c> for the four
         possible subtriangles in the patch. Order is (topright, topleft,
         bottomleft, bottomright).
@@ -1554,13 +1556,13 @@ def calc_slope_at_patch(
         Field name or array of node values.
     ignore_closed_nodes : bool
         If True, do not incorporate values at closed nodes into the calc.
-    subtriangle_unit_normals : tuple of ndarray, optional
+    subtriangle_unit_normals : tuple of 4 (npatches, 3) arrays (optional)
         The unit normal vectors for the four subtriangles of each patch,
         if already known. Order is TR, TL, BL, BR.
 
     Returns
     -------
-    slopes_at_patch :
+    slopes_at_patch : n_patches-long array
         The slope (positive gradient magnitude) of each patch, in radians.
 
     Examples
@@ -1669,16 +1671,16 @@ def calc_grad_at_patch(
         Field name or array of node values.
     ignore_closed_nodes : bool
         If True, do not incorporate values at closed nodes into the calc.
-    subtriangle_unit_normals : tuple ndarray, optional
+    subtriangle_unit_normals : tuple of 4 (npatches, 3) arrays (optional)
         The unit normal vectors for the four subtriangles of each patch,
         if already known. Order is TR, TL, BL, BR.
-    slope_magnitude : ndarray, optional
+    slope_magnitude : array with size num_patches (optional)
         The mean slope of each patch, if already known. Units must be the
         same as provided here!
 
     Returns
     -------
-    gradient_tuple : ``(x_component_at_patch, y_component_at_patch)``
+    gradient_tuple : (x_component_at_patch, y_component_at_patch)
         Len-2 tuple of arrays giving components of gradient in the x and y
         directions, in the units of *radians*.
 
@@ -1796,7 +1798,7 @@ def calc_slope_at_node(
 
     Returns
     -------
-    ndarray of float or tuple of ndarray of float
+    float array or length-2 tuple of float arrays
         If return_components, returns (array_of_magnitude,
         (array_of_slope_x_radians, array_of_slope_y_radians)).
         If not return_components, returns an array of slope magnitudes.

@@ -8,16 +8,16 @@ def angle_finder(grid, dn, cn, rn):
     ----------
     grid : ModelGrid
         A landlab grid.
-    dn : int or ndarray of int
+    dn : int or array of int
         Node or nodes at the end of the first vector.
-    cn : int or ndarray of int
+    cn : int or array of int
         Node or nodes at the vertex between vectors.
-    rn : int or ndarray of int
+    rn : int or array of int
         Node or nodes at the end of the second vector.
 
     Returns
     -------
-    float or ndarray of float
+    float or array of float
         Angle between vectors (in radians).
 
     Examples
@@ -220,9 +220,9 @@ def node_finder(grid, i, flowdirs, drain_area):
         A Landlab grid object
     i : int
         node ID of primary node
-    flowdirs : ndarray
+    flowdirs : array
         Flow direction array
-    drain_area : ndarray
+    drain_area : array
         drainage area array
 
     Returns

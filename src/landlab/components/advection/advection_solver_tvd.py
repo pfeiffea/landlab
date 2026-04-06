@@ -176,12 +176,12 @@ class AdvectionSolverTVD(Component):
     ----------
     grid : RasterModelGrid or HexModelGrid
         A Landlab grid object.
-    fields_to_advect : str or list or ndarray, optional
+    fields_to_advect : field name or list or (n_nodes,) array (default None)
         A node field of scalar values that will be advected, or list of fields.
         If not given, the component creates a generic field, initialized to zeros,
         called advected__quantity. If list >1 element given, advection will be
         applied to each field in it.
-    advection_direction_is_steady : bool
+    advection_direction_is_steady : bool (default False)
         Indicates whether the directions of advection are expected to remain
         steady throughout a run. If True, some computation time is saved
         by calculating upwind links only once.
@@ -301,11 +301,11 @@ class AdvectionSolverTVD(Component):
 
         Parameters
         ----------
-        scalar : ndarray
+        scalar : (n_nodes, ) array
             Scalar at-node field of values to be advected.
         dt : float
             Time-step duration. Needed to calculate the Courant number.
-        update_upwind_links : bool, optional
+        update_upwind_links : bool (optional; default False)
             If True, upwind links will be updated (set to True if the
             direction of advection is changing through time; if there are
             multiple advected quantities, it only needs to be True for the

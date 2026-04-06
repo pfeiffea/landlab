@@ -135,8 +135,9 @@ class RadialModelGrid(DualRadialGraph, ModelGrid):
             },
             attrs={"grid_type": "radial"},
         )
-        dataset.update(super().as_dataset(include=include, exclude=exclude, time=time))
-        return dataset
+        return dataset.update(
+            super().as_dataset(include=include, exclude=exclude, time=time)
+        )
 
     @property
     def xy_of_center(self):
