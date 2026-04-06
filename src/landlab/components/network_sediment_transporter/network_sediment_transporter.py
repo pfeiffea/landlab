@@ -547,9 +547,10 @@ class NetworkSedimentTransporter(Component):
                 out=taustar,
             )
 
-            # calculate active layer thickness (in units of m)
+            # calculate active layer thickness (in units of m) 
+            # -- Edited coefficient from 0.515 to 1.62 thanks to Sam Kodama
             self._active_layer_thickness = (
-                0.515
+                1.62
                 * self._d50_active
                 * (3.09 * (taustar - 0.0549).clip(0.0, None) ** 0.56)
             )
