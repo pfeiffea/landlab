@@ -1,2 +1,0 @@
-Modified the CI to publish to *PyPI* or *TestPyPI* on a manual
-trigger rather than on a version tag.
