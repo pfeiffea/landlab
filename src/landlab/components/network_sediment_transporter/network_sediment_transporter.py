@@ -26,7 +26,7 @@ from landlab.data_record.aggregators import aggregate_items_as_sum
 from landlab.data_record.data_record import DataRecord
 from landlab.grid.network import NetworkModelGrid
 
-_SUPPORTED_TRANSPORT_METHODS = frozenset(("WilcockCrowe","WilcockCroweD50"))
+_SUPPORTED_TRANSPORT_METHODS = frozenset(("WilcockCrowe", "WilcockCroweD50"))
 _SUPPORTED_ACTIVE_LAYER_METHODS = frozenset(
     ("WongParker", "GrainSizeDependent", "Constant10cm")
 )
@@ -412,11 +412,11 @@ class NetworkSedimentTransporter(Component):
     def d_mean_active(self) -> float:
         """Mean parcel grain size of active parcels aggregated at link."""
         return self._d_mean_active
-    
+
     @property
     def d50_active(self) -> float:
         """Median parcel grain size of active parcels aggregated at link."""
-        return self._d50_active    
+        return self._d50_active
 
     @property
     def rhos_mean_active(self) -> float:
@@ -491,18 +491,22 @@ class NetworkSedimentTransporter(Component):
         )
 
         # new code to calc D50 instead of dmean 8/19/24
-        self._d50_active = np.full(self.grid.number_of_links,np.nan)
+        self._d50_active = np.full(self.grid.number_of_links, np.nan)
         for link in range(self.grid.number_of_links):
-            mask_here = self._parcels.dataset.element_id.values[:,-1] == link 
-            mask_active = self._parcels.dataset.active_layer[:,-1] == 1
+            mask_here = self._parcels.dataset.element_id.values[:, -1] == link
+            mask_active = self._parcels.dataset.active_layer[:, -1] == 1
 
-            parcel_vol = self._parcels.dataset.volume.values[mask_here & mask_active,-1]
-            parcel_D = self._parcels.dataset.D.values[mask_here & mask_active,-1] 
+            parcel_vol = self._parcels.dataset.volume.values[
+                mask_here & mask_active, -1
+            ]
+            parcel_D = self._parcels.dataset.D.values[mask_here & mask_active, -1]
 
-            self._d50_active[link] = calculate_x_percentile_grain_size(parcel_D,parcel_vol,50)
-            
+            self._d50_active[link] = calculate_x_percentile_grain_size(
+                parcel_D, parcel_vol, 50
+            )
+
         if np.any(np.asarray(self._d50_active < 0)):
-            
+
             raise ValueError(
                 "NetworkSedimentTransporter: a calculated grain size is negative"
                 + " D_50= "
@@ -547,8 +551,8 @@ class NetworkSedimentTransporter(Component):
                 out=taustar,
             )
 
-            # calculate active layer thickness (in units of m) 
-            # -- Edited coefficient from 0.515 to 1.62 AND tau*c to 
+            # calculate active layer thickness (in units of m)
+            # -- Edited coefficient from 0.515 to 1.62 AND tau*c to
             # Wilcock + Crowe value thanks to convo w/Sam Kodama
             # -- Edited clip value to be slightly >0, to avoid active layer
             # migrating to 0 in low transport
@@ -862,7 +866,7 @@ class NetworkSedimentTransporter(Component):
         ) * self._active_parcel_records
 
         sand_parcel_volumes = self._parcels.dataset.volume.values[:, -1].copy()
-        sand_parcel_volumes[~findactivesand[:, -1].astype(bool)] = 0.0 
+        sand_parcel_volumes[~findactivesand[:, -1].astype(bool)] = 0.0
 
         vol_act_sand = aggregate_items_as_sum(
             self._parcels.dataset["element_id"].values[:, -1].astype(int),
@@ -886,7 +890,9 @@ class NetworkSedimentTransporter(Component):
             rhos_act_i = Rhoarray[active_here]
             vol_act_tot_i = np.sum(vol_act_i)
 
-            self._d50_active[i] = calculate_x_percentile_grain_size(d_act_i,vol_act_i,50)
+            self._d50_active[i] = calculate_x_percentile_grain_size(
+                d_act_i, vol_act_i, 50
+            )
 
             if vol_act_tot_i > 0:
                 self._rhos_mean_active[i] = np.sum(rhos_act_i * vol_act_i) / (
@@ -917,7 +923,7 @@ class NetworkSedimentTransporter(Component):
 
         b = 0.67 / (1.0 + np.exp(1.5 - Darray / D50_activearray))
 
-        #b = 0 # sensitivity analysis 11/3/24 AP for CSDMS talk
+        # b = 0 # sensitivity analysis 11/3/24 AP for CSDMS talk
 
         tau = self._fluid_density * self._g * Harray * Sarray
         tau = np.atleast_1d(tau)
@@ -958,7 +964,6 @@ class NetworkSedimentTransporter(Component):
         self._grid.at_link["sediment_total_volume"] = self._vol_tot
         self._grid.at_link["sediment__active__volume"] = self._vol_act
         self._grid.at_link["sediment__active__sand_fraction"] = frac_sand
-
 
     def _move_parcel_downstream(self, dt):
         """Method to update parcel location for each parcel in the active layer."""
@@ -1085,7 +1090,7 @@ class NetworkSedimentTransporter(Component):
         else:
             abrasion_now = self._parcels.dataset.abrasion_rate.copy()
 
-        # reduce D and volume due to abrasion 
+        # reduce D and volume due to abrasion
         vol = _calculate_parcel_volume_post_abrasion(
             self._parcels.dataset.volume[active_parcel_ids, self._time_idx],
             distance_to_travel_this_timestep[active_parcel_ids],
@@ -1098,13 +1103,11 @@ class NetworkSedimentTransporter(Component):
             vol,
         )
 
-        # update parcel attributes 
+        # update parcel attributes
         # arrival time in link - "shuffle" active layer by adding random
         self._parcels.dataset.time_arrival_in_link[
             active_parcel_ids, self._time_idx
-        ] = (self._time_idx 
-            + np.random.uniform(size=np.size(active_parcel_ids))
-        )
+        ] = self._time_idx + np.random.uniform(size=np.size(active_parcel_ids))
 
         # location in link
         self._parcels.dataset.location_in_link[active_parcel_ids, self._time_idx] = (
@@ -1152,7 +1155,7 @@ class NetworkSedimentTransporter(Component):
         if self._this_timesteps_parcels.any():
             self._partition_active_and_storage_layers()
             self._adjust_node_elevation()
-            self._update_channel_slopes() 
+            self._update_channel_slopes()
             self._update_transport_time()
             self._move_parcel_downstream(dt)
 
@@ -1471,19 +1474,20 @@ def _calculate_parcel_grain_diameter_post_abrasion(
 
     return abraded_grain_diameter
 
-def calculate_x_percentile_grain_size(D_array,vol_array,percentile):
-    """Calculate the percentile grain size, e.g. D50, given an array of 
+
+def calculate_x_percentile_grain_size(D_array, vol_array, percentile):
+    """Calculate the percentile grain size, e.g. D50, given an array of
     parcel grain diameters and associated parcel volumes. Returns NaN if there
-    are fewer than 3 parcels. 
+    are fewer than 3 parcels.
 
     Parameters
     ----------
     D_array : array
         Grain diameters
     vol_array: array
-        Parcel volumes associated with D_array. 
+        Parcel volumes associated with D_array.
     percentile: float
-        Grain size distribution percentile of interest. 50 returns the 
+        Grain size distribution percentile of interest. 50 returns the
         median grain diameter, D50.
 
     Examples
@@ -1492,37 +1496,45 @@ def calculate_x_percentile_grain_size(D_array,vol_array,percentile):
     >>> from numpy.testing import assert_almost_equal
 
     If all grains are the same size, D50 should be that size.
-    >>> D_array = np.array([2,2,2])
-    >>> vol_array= np.array([4,1,1])
-    >>> _calculate_x_percentile_grain_size(D_array,vol_array,50)
+    >>> D_array = np.array([2, 2, 2])
+    >>> vol_array = np.array([4, 1, 1])
+    >>> _calculate_x_percentile_grain_size(D_array, vol_array, 50)
     2.0
 
-    Large parcels of small diameter, outlier large grain, D16 should be small. 
-    >>> D_array = np.array([0.5,0.5,1,1,100])
-    >>> vol_array= np.array([4,4,.1,.1,.1])
-    >>> _calculate_x_percentile_grain_size(D_array,vol_array,16)
+    Large parcels of small diameter, outlier large grain, D16 should be small.
+    >>> D_array = np.array([0.5, 0.5, 1, 1, 100])
+    >>> vol_array = np.array([4, 4, 0.1, 0.1, 0.1])
+    >>> _calculate_x_percentile_grain_size(D_array, vol_array, 16)
     0.5
 
     """
 
-    if D_array.size > 1: # if array has at least one value
+    if D_array.size > 1:  # if array has at least one value
         idx_Dsort = np.argsort(D_array)
         D_sorted = D_array[idx_Dsort]
         vol_sorted_by_D = vol_array[idx_Dsort]
         cum_vol_sorted_by_D = np.cumsum(vol_sorted_by_D)
-        vol_percentile = cum_vol_sorted_by_D/np.max(cum_vol_sorted_by_D)
-        
-        vol_perc_shift = np.zeros_like(vol_percentile)
-        vol_perc_shift[1:]=vol_percentile[:-1]
-        
-        vol_mid_percentile = (vol_percentile+vol_perc_shift)/2 # take the mid-point of the percentile calc. 
-        
-        percentile_below = max([val for val in vol_mid_percentile if val <= percentile / 100])
-        D_below = D_sorted[np.where(vol_mid_percentile == percentile_below)[0][0]]
-        
-        percentile_above_vals = [val for val in vol_mid_percentile if val > percentile / 100]
+        vol_percentile = cum_vol_sorted_by_D / np.max(cum_vol_sorted_by_D)
 
-        if not percentile_above_vals: # If no values above, use the largest available value
+        vol_perc_shift = np.zeros_like(vol_percentile)
+        vol_perc_shift[1:] = vol_percentile[:-1]
+
+        vol_mid_percentile = (
+            vol_percentile + vol_perc_shift
+        ) / 2  # take the mid-point of the percentile calc.
+
+        percentile_below = max(
+            [val for val in vol_mid_percentile if val <= percentile / 100]
+        )
+        D_below = D_sorted[np.where(vol_mid_percentile == percentile_below)[0][0]]
+
+        percentile_above_vals = [
+            val for val in vol_mid_percentile if val > percentile / 100
+        ]
+
+        if (
+            not percentile_above_vals
+        ):  # If no values above, use the largest available value
             percentile_above = np.max(vol_mid_percentile)
             D_above = D_sorted[np.where(vol_mid_percentile == percentile_above)[0][0]]
         else:
@@ -1530,16 +1542,15 @@ def calculate_x_percentile_grain_size(D_array,vol_array,percentile):
             D_above = D_sorted[np.where(vol_mid_percentile == percentile_above)[0][0]]
 
         # Interpolate to calculate the desired percentile grain size (D_x)
-        D_x = ((D_above - D_below) *
-               (((percentile / 100) - percentile_below) /
-                (percentile_above - percentile_below)) +
-               D_below
-               )  # Bunte and Abt (2001) Eqn 2.15
-    
+        D_x = (D_above - D_below) * (
+            ((percentile / 100) - percentile_below)
+            / (percentile_above - percentile_below)
+        ) + D_below  # Bunte and Abt (2001) Eqn 2.15
+
     elif D_array.size == 1:
         D_x = D_array[0]
-        
-    else: 
+
+    else:
         D_x = np.nan
 
-    return(D_x)
+    return D_x
