@@ -1507,16 +1507,16 @@ def calculate_x_percentile_grain_size(D_array, vol_array, percentile):
     >>> _calculate_x_percentile_grain_size(D_array, vol_array, 16)
     0.5
 
-    Just one parcel. 
+    Just one parcel.
     >>> D_array = np.array([0.5])
-    >>> vol_array= np.array([1])
-    >>> _calculate_x_percentile_grain_size(D_array,vol_array,16)
+    >>> vol_array = np.array([1])
+    >>> _calculate_x_percentile_grain_size(D_array, vol_array, 16)
     0.5
 
-    No parcels? D = nan. 
+    No parcels? D = nan.
     >>> D_array = np.array([])
-    >>> vol_array= np.array([])
-    >>> _calculate_x_percentile_grain_size(D_array,vol_array,16)
+    >>> vol_array = np.array([])
+    >>> _calculate_x_percentile_grain_size(D_array, vol_array, 16)
     np.nan
 
     """
