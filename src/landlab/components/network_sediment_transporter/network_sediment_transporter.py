@@ -548,11 +548,14 @@ class NetworkSedimentTransporter(Component):
             )
 
             # calculate active layer thickness (in units of m) 
-            # -- Edited coefficient from 0.515 to 1.62 thanks to Sam Kodama
+            # -- Edited coefficient from 0.515 to 1.62 AND tau*c to 
+            # Wilcock + Crowe value thanks to convo w/Sam Kodama
+            # -- Edited clip value to be slightly >0, to avoid active layer
+            # migrating to 0 in low transport
             self._active_layer_thickness = (
                 1.62
                 * self._d50_active
-                * (3.09 * (taustar - 0.0549).clip(0.0, None) ** 0.56)
+                * (3.09 * (taustar - 0.036).clip(0.01, None) ** 0.56)
             )
 
         elif self._active_layer_method == "GrainSizeDependent":
