@@ -137,6 +137,7 @@ def test_defined_parcel_transport():
         Distance_Traveled_Should_Be, distance_traveled, decimal=-1
     )
 
+
 def test_defined_parcel_transport_WCd50():
     y_of_node = (0, 0, 0, 0)
     x_of_node = (0, 100, 200, 300)
