@@ -551,7 +551,7 @@ class NetworkSedimentTransporter(Component):
             # -- Edited coefficient from 0.515 to 1.62 AND tau*c to 
             # Wilcock + Crowe value thanks to convo w/Sam Kodama
             # -- Edited clip value to be slightly >0, to avoid active layer
-            # migrating to 0 in low transport
+            # migrating to 0 in low transport conditions
             self._active_layer_thickness = (
                 1.62
                 * self._d50_active
@@ -559,7 +559,7 @@ class NetworkSedimentTransporter(Component):
             )
 
         elif self._active_layer_method == "GrainSizeDependent":
-            # Set all active layers to a multiple of the lnk mean grain size
+            # Set all active layers to a multiple of the link mean grain size
             self._active_layer_thickness = (
                 self._d50_active * self._active_layer_d_multiplier
             )
@@ -1502,6 +1502,18 @@ def calculate_x_percentile_grain_size(D_array,vol_array,percentile):
     >>> vol_array= np.array([4,4,.1,.1,.1])
     >>> _calculate_x_percentile_grain_size(D_array,vol_array,16)
     0.5
+
+    Just one parcel. 
+    >>> D_array = np.array([0.5])
+    >>> vol_array= np.array([1])
+    >>> _calculate_x_percentile_grain_size(D_array,vol_array,16)
+    0.5
+
+    No parcels? D = nan. 
+    >>> D_array = np.array([])
+    >>> vol_array= np.array([])
+    >>> _calculate_x_percentile_grain_size(D_array,vol_array,16)
+    np.nan
 
     """
 
