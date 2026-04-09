@@ -688,7 +688,7 @@ class NetworkSedimentTransporter(Component):
                     ][n]
 
                 alluvium__depth = _calculate_alluvium_depth(
-                    self._vol_stor[downstream_link_id][n],
+                    self._vol_tot[downstream_link_id][n],
                     width_of_upstream_links,
                     length_of_upstream_links,
                     width_of_downstream_link,
