@@ -161,7 +161,7 @@ class NetworkSedimentTransporter(Component):
     ...     bed_porosity=0.03,
     ...     g=9.81,
     ...     fluid_density=1000,
-    ...     transport_method="WilcockCrowe",
+    ...     transport_method="WilcockCroweD50",
     ...     active_layer_method="WongParker",
     ... )
 
@@ -268,7 +268,9 @@ class NetworkSedimentTransporter(Component):
         bed_porosity: float = 0.3,
         g: float = scipy.constants.g,
         fluid_density: float = 1000.0,
-        transport_method: Literal["WilcockCrowe"] = "WilcockCrowe",
+        transport_method: Literal[
+            "WilcockCrowe", "WilcockCroweD50"
+        ] = "WilcockCroweD50",
         active_layer_method: Literal[
             "WongParker", "GrainSizeDependent", "Constant10cm"
         ] = "WongParker",
@@ -302,7 +304,7 @@ class NetworkSedimentTransporter(Component):
         fluid_density: float, optional
             Density of the fluid (generally, water) in which sediment is
             moving [kg / m^3].
-        transport_method: {"WilcockCrowe"}, optional
+        transport_method: {"WilcockCrowe","WilcockCroweD50"}, optional
             Sediment transport equation option.
         active_layer_method: {"WongParker", "GrainSizeDependent", "Constant10cm"}, optional
             Option for treating sediment active layer as a constant or variable.
@@ -470,11 +472,14 @@ class NetworkSedimentTransporter(Component):
             )
 
     def _calculate_mean_D_and_rho(self) -> None:
-        """Calculate mean grain size and density on each link"""
-        # self._d_mean_active = self._grid.zeros(at="link")
-        # self._rhos_mean_active = self._grid.zeros(at="link")
+        """Calculate mean grain size and density on each link. Used in init,
+        but not during run_one_step.
 
-        # 8/19 XXX these aren't filtered for only active parcels
+        """
+
+        # Note: rhos and d mean aren't filtered for only active parcels,
+        # but this calculation is just for init. Using BPIs, this should have no
+        # major effect, since parcels are randomly sorted.
 
         self._rhos_mean_active = aggregate_items_as_mean(
             self._parcels.dataset["element_id"].values[:, -1].astype(int),
@@ -490,7 +495,6 @@ class NetworkSedimentTransporter(Component):
             size=self._grid.number_of_links,
         )
 
-        # new code to calc D50 instead of dmean 8/19/24
         self._d50_active = np.full(self.grid.number_of_links, np.nan)
         for link in range(self.grid.number_of_links):
             mask_here = self._parcels.dataset.element_id.values[:, -1] == link
@@ -553,13 +557,17 @@ class NetworkSedimentTransporter(Component):
 
             # calculate active layer thickness (in units of m)
             # -- Edited coefficient from 0.515 to 1.62 AND tau*c to
-            # Wilcock + Crowe value thanks to convo w/Sam Kodama
-            # -- Edited clip value to be slightly >0, to avoid active layer
-            # migrating to 0 in low transport conditions
-            self._active_layer_thickness = (
-                1.62
-                * self._d50_active
-                * (3.09 * (taustar - 0.036).clip(0.01, None) ** 0.56)
+            # Wilcock and Crowe value thanks to conversation w/Sam Kodama
+            # -- Edited to make the minimum active layer thickness = D50 to
+            # reduce instabilities related to small numbers of active parcels in
+            # highly stable beds
+            self._active_layer_thickness = np.maximum(
+                self._d50_active,
+                (
+                    1.62
+                    * self._d50_active
+                    * (3.09 * (taustar - 0.036).clip(0.0, None) ** 0.56)
+                ),
             )
 
         elif self._active_layer_method == "GrainSizeDependent":
@@ -637,9 +645,7 @@ class NetworkSedimentTransporter(Component):
             size=self._grid.number_of_links,
         )
 
-        self._vol_stor = (
-            self._vol_tot - self._vol_act
-        )  # stored parcel rock volume (bug fix AP 4/25/24)
+        self._vol_stor = self._vol_tot - self._vol_act  # stored parcel rock volume
 
     def _adjust_node_elevation(self) -> None:
         """Adjusts slope for each link based on parcel motions from last
@@ -696,9 +702,10 @@ class NetworkSedimentTransporter(Component):
 
     def _calc_transport_wilcock_crowe(self) -> None:
         """Method to determine the transport time for each parcel in the active
-        layer using a sediment transport equation.
+        layer using a sediment transport equation. This version (from the original
+        version of the NST) bases the calculations on the arithmetic mean grain size,
+        which makes it sensitive to outlier grain sizes.
 
-        Note: could have options here (e.g. Wilcock and Crowe, FLVB, MPM, etc)
         """
         # Initialize _pvelocity, the virtual velocity of each parcel
         # (link length / link travel time)
@@ -828,9 +835,9 @@ class NetworkSedimentTransporter(Component):
 
     def _calc_transport_wilcock_crowe_d50(self):
         """Method to determine the transport time for each parcel in the active
-        layer using a sediment transport equation.
+        layer using a sediment transport equation. This version bases the calculations
+        on the median grain size.
 
-        Note: could have options here (e.g. Wilcock and Crowe, FLVB, MPM, etc)
         """
         # Initialize _pvelocity, the virtual velocity of each parcel
         # (link length / link travel time)
@@ -923,7 +930,7 @@ class NetworkSedimentTransporter(Component):
 
         b = 0.67 / (1.0 + np.exp(1.5 - Darray / D50_activearray))
 
-        # b = 0 # sensitivity analysis 11/3/24 AP for CSDMS talk
+        # b = 0 # sensitivity analysis: turn off hiding function
 
         tau = self._fluid_density * self._g * Harray * Sarray
         tau = np.atleast_1d(tau)
