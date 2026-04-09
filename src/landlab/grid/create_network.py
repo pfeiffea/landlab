@@ -247,24 +247,28 @@ class AtMostNodes(SegmentReducer):
 
 
 def spacing_from_drainage_area(
-    drainage_area,
-    a=9.68,
-    b=0.32,
-    n_widths=20.0,
-):
+    drainage_area: npt.NDArray[np.floating] | float,
+    a: float = 9.68,
+    b: float = 0.32,
+    n_widths: float = 20.0,
+) -> npt.NDArray[np.floating] | float:
     """Calculate channel spacing based on upstream drainage area of each node.
 
     Parameters
     ----------
-    drainage_area : number or ndarray
+    drainage_area : float or ndarray
         Upstream drainage area in km ** 2.
+    a, b : float, optional
+        Coefficient and exponent to use for channel width calculation.
+    n_widths: float, optional
+        Number of channel widths for the spacing.
 
     Returns
     -------
     ndarray
         Node spacing in meters.
     """
-    return n_widths * (a * drainage_area / (1000**2)) ** b
+    return n_widths * (a * drainage_area / 1e6) ** b
 
 
 def _reduce_nodes(distance_along_segment, spacing=1.0):
@@ -272,9 +276,9 @@ def _reduce_nodes(distance_along_segment, spacing=1.0):
 
     Parameters
     ----------
-    distance_along_segment : array of float
+    distance_along_segment : ndarray of float
         Distance along a segment to each of the segment's nodes.
-    spacing : float or array of float, optional
+    spacing : float or ndarray of float, optional
         Minimum spacing for each node along a segment. If a scalar,
         a constant spacing is used along the segment.
 
@@ -337,7 +341,7 @@ def _reduce_nodes(distance_along_segment, spacing=1.0):
 
 
 def calc_distance_to_point(point, points):
-    """Find the euclidian distance between one point and a set of points."""
+    """Find the euclidean distance between one point and a set of points."""
     return np.sqrt(np.sum((point - points) ** 2, axis=1))
 
 
@@ -346,9 +350,9 @@ def _reduce_to_fewest_nodes(xy_of_node, spacing=1.0):
 
     Parameters
     ----------
-    xy_of_node : array of float shape (n_nodes, 2)
+    xy_of_node : ndarray of float
         x and y coordinates of each node along a segment.
-    spacing : float or array of float, optional
+    spacing : float or ndarray of float, optional
         Minimum spacing for each node along a segment. If a scalar,
         a constant spacing is used along the segment.
 

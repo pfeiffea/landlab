@@ -314,7 +314,7 @@ class NetworkSedimentTransporter(Component):
             Pfeiffer et al. (2022)
         """
         if not isinstance(grid, NetworkModelGrid):
-            raise ValueError("grid must be NetworkModelGrid")
+            raise TypeError("grid must be NetworkModelGrid")
 
         # run super. this will check for required inputs specified by _info
         super().__init__(grid)
@@ -322,7 +322,7 @@ class NetworkSedimentTransporter(Component):
         # check key information about the parcels, including that all required
         # attributes are present.
         if not isinstance(parcels, DataRecord):
-            raise ValueError("parcels must be an instance of DataRecord")
+            raise TypeError("parcels must be an instance of DataRecord")
 
         for rpa in _REQUIRED_PARCEL_ATTRIBUTES:
             if rpa not in parcels.dataset:
@@ -338,7 +338,7 @@ class NetworkSedimentTransporter(Component):
         # assert that the flow director is a component and is of type
         # FlowDirectorSteepest
         if not isinstance(flow_director, FlowDirectorSteepest):
-            raise ValueError("flow_director must be FlowDirectorSteepest.")
+            raise TypeError("flow_director must be FlowDirectorSteepest")
 
         # save reference to flow director
         self._fd = flow_director
@@ -503,7 +503,7 @@ class NetworkSedimentTransporter(Component):
                 * self._grid.at_link["flow_depth"]
             )
 
-            # calcuate taustar
+            # calculate taustar
             taustar = np.zeros_like(tau)
             np.divide(
                 tau,
@@ -953,10 +953,10 @@ class NetworkSedimentTransporter(Component):
            the new time
         2. If parcels are on the network then:
 
-           a. Active parcels are identified based on entrainment critera.
+           a. Active parcels are identified based on entrainment criteria.
            b. Effective bed slope is calculated based on inactive parcel volumes.
            c. Transport rate is calculated.
-           d. Active parcels are moved based on the tranport rate.
+           d. Active parcels are moved based on the transport rate.
 
         Parameters
         ----------

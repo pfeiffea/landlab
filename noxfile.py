@@ -59,13 +59,7 @@ def test(session: nox.Session) -> None:
     install(session)
 
     session.run(
-        "coverage",
-        "run",
-        "--source=landlab,tests",
-        "--branch",
-        "--module",
-        "pytest",
-        env={"PYTEST_ADDOPTS": os.environ.get("PYTEST_ADDOPTS", "-m 'not richdem'")},
+        "coverage", "run", "--source=landlab,tests", "--branch", "--module", "pytest"
     )
     session.run("coverage", "report", "--ignore-errors", "--show-missing")
     session.run("coverage", "xml", "-o", "coverage.xml")
@@ -89,39 +83,7 @@ def test_notebooks(session: nox.Session) -> None:
         "--nbmake-timeout=3000",
         *("-n", "auto"),
         "-vvv",
-        env={"PYTEST_ADDOPTS": os.environ.get("PYTEST_ADDOPTS", "-m 'not richdem'")},
     )
-
-
-@nox.session(name="test-richdem", venv_backend="conda")
-def test_richdem(session: nox.Session) -> None:
-    """Run richdem tests."""
-    session.conda_install("richdem", channel=["nodefaults", "conda-forge"])
-    session.install(
-        "git+https://github.com/mcflugen/nbmake.git@v1.5.4-markers",
-        *("-r", PATH["requirements"] / "testing.txt"),
-        *("-r", PATH["requirements"] / "notebooks.txt"),
-    )
-    install(session)
-
-    session.run(
-        "coverage",
-        "run",
-        "--source=landlab,tests",
-        "--branch",
-        "--module",
-        "pytest",
-        "tests",
-        "notebooks",
-        "--nbmake",
-        "--nbmake-kernel=python3",
-        "--nbmake-timeout=3000",
-        *("-m", "richdem"),
-        *("-n", "auto"),
-        "-vvv",
-    )
-    session.run("coverage", "report", "--ignore-errors", "--show-missing")
-    session.run("coverage", "xml", "-o", "coverage.xml")
 
 
 @nox.session(name="test-cli")
@@ -225,7 +187,7 @@ def docs_check_links(session: nox.Session) -> None:
     ]
 
     if broken_links:
-        print("\n".join(sorted(broken_links)))
+        print("\n".join(f"❌ {link}" for link in sorted(broken_links)))
         session.error(
             f"{len(broken_links)} broken links were found."
             f" see {output_json} for a complete log"
