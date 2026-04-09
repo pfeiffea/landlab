@@ -433,7 +433,7 @@ class NetworkSedimentTransporter(Component):
         this step.
         """
 
-        if self._time_idx != 0:
+        if self._time_idx in (1, 2): # the 1st + 2nd timestep, add a column (as in orig NST)
             self._parcels.add_record(time=[self._time])
 
             self._parcels.ffill_grid_element_and_id()
@@ -443,6 +443,19 @@ class NetworkSedimentTransporter(Component):
                 self._parcels.dataset[at].values[:, self._time_idx] = (
                     self._parcels.dataset[at].values[:, self._time_idx - 1]
                 )
+
+        if self._time_idx >2: # subsequent timesteps, copy previous timestep into
+            # time index -2 position. 
+            
+            for at in self._time_variable_parcel_attributes:
+                self._parcels.dataset[at].values[:,-2] = (
+                    self._parcels.dataset[at].values[:,-1]
+                )
+
+            # reset the parcel times 
+            self._parcels.dataset.time.values[-2]=self._parcels.dataset.time.values[-1] 
+
+            self._parcels.dataset.time.values[-1]=self._time      
 
         self._this_timesteps_parcels = np.zeros_like(
             self._parcels.dataset.element_id, dtype=bool
@@ -713,12 +726,12 @@ class NetworkSedimentTransporter(Component):
 
         # parcel attribute arrays from DataRecord
 
-        Darray = self._parcels.dataset.D[:, self._time_idx]
-        Activearray = self._parcels.dataset.active_layer[:, self._time_idx].values
+        Darray = self._parcels.dataset.D[:, -1]
+        Activearray = self._parcels.dataset.active_layer[:, -1].values
         Rhoarray = self._parcels.dataset.density.values
-        Volarray = self._parcels.dataset.volume[:, self._time_idx].values
+        Volarray = self._parcels.dataset.volume[:,-1].values
         # link that the parcel is currently in
-        Linkarray = self._parcels.dataset.element_id[:, self._time_idx].values
+        Linkarray = self._parcels.dataset.element_id[:,-1].values
 
         R = (Rhoarray - self._fluid_density) / self._fluid_density
 
@@ -845,12 +858,12 @@ class NetworkSedimentTransporter(Component):
 
         # parcel attribute arrays from DataRecord
 
-        Darray = self._parcels.dataset.D[:, self._time_idx].values
-        Activearray = self._parcels.dataset.active_layer[:, self._time_idx].values
+        Darray = self._parcels.dataset.D[:,-1].values
+        Activearray = self._parcels.dataset.active_layer[:,-1].values
         Rhoarray = self._parcels.dataset.density.values
-        Volarray = self._parcels.dataset.volume[:, self._time_idx].values
+        Volarray = self._parcels.dataset.volume[:,-1].values
         Linkarray = self._parcels.dataset.element_id[
-            :, self._time_idx
+            :, -1
         ].values  # link that the parcel is currently in
 
         R = (Rhoarray - self._fluid_density) / self._fluid_density
@@ -1002,7 +1015,7 @@ class NetworkSedimentTransporter(Component):
 
         # active parcels on the network:
         in_network = (
-            self._parcels.dataset.element_id.values[:, self._time_idx]
+            self._parcels.dataset.element_id.values[:,-1]
             != self.OUT_OF_NETWORK
         )
         active = distance_to_travel_this_timestep > 0.0
@@ -1090,7 +1103,7 @@ class NetworkSedimentTransporter(Component):
                 self._k_transp_dep_abr,
                 self._parcels.dataset.density.values,
                 self._fluid_density,
-                self._parcels.dataset.D.values[:, self._time_idx],
+                self._parcels.dataset.D.values[:,-1],
                 self._tautaur,
             )
             abrasion_now = self._abrasion_rate_xport_dep.copy()
@@ -1099,35 +1112,35 @@ class NetworkSedimentTransporter(Component):
 
         # reduce D and volume due to abrasion
         vol = _calculate_parcel_volume_post_abrasion(
-            self._parcels.dataset.volume[active_parcel_ids, self._time_idx],
+            self._parcels.dataset.volume[active_parcel_ids,-1],
             distance_to_travel_this_timestep[active_parcel_ids],
             abrasion_now[active_parcel_ids],
         )
 
         D = _calculate_parcel_grain_diameter_post_abrasion(
-            self._parcels.dataset.D[active_parcel_ids, self._time_idx],
-            self._parcels.dataset.volume[active_parcel_ids, self._time_idx],
+            self._parcels.dataset.D[active_parcel_ids,-1],
+            self._parcels.dataset.volume[active_parcel_ids,-1],
             vol,
         )
 
         # update parcel attributes
         # arrival time in link - "shuffle" active layer by adding random
         self._parcels.dataset.time_arrival_in_link[
-            active_parcel_ids, self._time_idx
+            active_parcel_ids, -1
         ] = self._time_idx + np.random.uniform(size=np.size(active_parcel_ids))
 
         # location in link
-        self._parcels.dataset.location_in_link[active_parcel_ids, self._time_idx] = (
+        self._parcels.dataset.location_in_link[active_parcel_ids,-1] = (
             location_in_link[active_parcel_ids]
         )
 
-        self._parcels.dataset.element_id[active_parcel_ids, self._time_idx] = (
+        self._parcels.dataset.element_id[active_parcel_ids,-1] = (
             current_link[active_parcel_ids]
         )
-        #                self._parcels.dataset.active_layer[p, self._time_idx] = 1
+        #                self._parcels.dataset.active_layer[p,-1] = 1
         # ^ reset to 1 (active) to be recomputed/determined at next timestep
-        self._parcels.dataset.D[active_parcel_ids, self._time_idx] = D
-        self._parcels.dataset.volume[active_parcel_ids, self._time_idx] = vol
+        self._parcels.dataset.D[active_parcel_ids,-1] = D
+        self._parcels.dataset.volume[active_parcel_ids,-1] = vol
 
     def run_one_step(self, dt: float) -> None:
         """Run :class:`~.NetworkSedimentTransporter` forward in time.
