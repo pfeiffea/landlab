@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
+from collections.abc import Iterable
 
 import numpy as np
 import xarray as xr
+from numpy.typing import ArrayLike
+from numpy.typing import NDArray
+from requireit import raise_as
+from requireit import require_dtype
 
 
 class DataRecord:
@@ -230,9 +235,10 @@ class DataRecord:
                     raise ValueError(f"Dummy id {at} {item} invalid")
 
         # set initial time coordinates, if any
+        n_times = 0
         if isinstance(time, (list, np.ndarray)):
             self._times = np.array(time)
-            self._number_of_times = len(self._times)
+            n_times = len(self._times)
         elif time is not None:
             raise TypeError("time must be a list or numpy array")
 
@@ -259,20 +265,19 @@ class DataRecord:
                 ) from exc
 
             self._number_of_items = len(_element_ids)
-            if len(_grid_elements) != self._number_of_items:
-                if isinstance(_grid_elements, str):
-                    pass
-                else:
-                    raise ValueError(
-                        "The number of grid_element passed "
-                        "to DataRecord must be 1 or equal "
-                        "to the number of element_id."
-                    )
+
+            shape = (self._number_of_items,)
+            if n_times:
+                shape += (n_times,)
 
             # check that grid_element and element_id exist on the grid and
             # have valid format:
-            _grid_elements, _element_ids = self._check_grid_element_and_id(
+            _grid_elements, _element_ids = self._norm_elements_and_ids(
                 _grid_elements, _element_ids
+            )
+
+            _grid_elements, _element_ids = self._broadcast_elements_and_ids(
+                _grid_elements, _element_ids, shape=shape
             )
 
             # check that element IDs do not exceed number of elements
@@ -346,39 +351,26 @@ class DataRecord:
         # create an xarray Dataset:
         self._dataset = xr.Dataset(data_vars=data_vars_dict, coords=coords, attrs=attrs)
 
-    def _check_grid_element_and_id(self, grid_element, element_id):
-        """Check the location and size of grid_element and element_id."""
-        if isinstance(grid_element, str):
-            # create list of grid_element for all items
-            ge_name = grid_element
-            if hasattr(self, "_number_of_times"):
-                # if time
-                grid_element = np.array(
-                    np.empty(
-                        (self._number_of_items, self._number_of_times), dtype=object
-                    )
-                )
+    def _norm_elements_and_ids(
+        self,
+        elements: ArrayLike,
+        ids: ArrayLike,
+    ) -> tuple[NDArray[np.str_], NDArray[np.intp]]:
+        return (
+            norm_grid_element(elements, allowed=self._permitted_locations),
+            norm_element_id(ids),
+        )
 
-                if element_id.shape != grid_element.shape:
-                    element_id = np.broadcast_to(element_id, grid_element.shape)
-
-            else:
-                # no time
-                grid_element = np.array(
-                    np.empty((self._number_of_items,), dtype=object)
-                )
-            grid_element.fill(ge_name)
-
-        # verify all grid elements are valid.
-        for loc in grid_element.flatten():
-            if loc not in self._permitted_locations:
-                raise ValueError(
-                    "One or more of the grid elements"
-                    " provided is/are not permitted location"
-                    " for this grid type"
-                )
-
-        return grid_element, element_id
+    def _broadcast_elements_and_ids(
+        self,
+        elements: NDArray[np.str_],
+        ids: NDArray[np.intp],
+        shape: tuple[int, ...],
+    ) -> tuple[NDArray[np.str_], NDArray[np.intp]]:
+        return (
+            np.broadcast_to(elements, shape).copy(),
+            np.broadcast_to(ids, shape).copy(),
+        )
 
     def _check_element_id_values(self, grid_element, element_id):
         """Check that element_id values are valid."""
@@ -539,10 +531,7 @@ class DataRecord:
                             ) from exc
                         # check that grid_element and element_id exist
                         # on the grid and have valid format:
-                        (
-                            new_grid_element,
-                            new_element_id,
-                        ) = self._check_grid_element_and_id(
+                        new_grid_element, new_element_id = self._norm_elements_and_ids(
                             new_grid_element, new_element_id
                         )
 
@@ -749,7 +738,7 @@ class DataRecord:
                 }
                 # check that grid_element and element_id exist
                 # on the grid and have valid format
-                _grid_elements, _element_ids = self._check_grid_element_and_id(
+                _grid_elements, _element_ids = self._norm_elements_and_ids(
                     _grid_elements, _element_ids
                 )
 
@@ -767,7 +756,7 @@ class DataRecord:
             coords_to_add = {"item_id": np.array(new_item_ids)}
             # check that grid_element and element_id exist on
             # the grid and have valid format:
-            _grid_elements, _element_ids = self._check_grid_element_and_id(
+            _grid_elements, _element_ids = self._norm_elements_and_ids(
                 _grid_elements, _element_ids
             )
             # check that element IDs do not exceed number of
@@ -836,8 +825,7 @@ class DataRecord:
         >>> dr4.get_data(time=[50.0], data_variable="item_size")
         array([0.3, 0.4, 0.8, 0.4])
         >>> dr4.get_data(item_id=[1, 2], data_variable="grid_element")
-        array([['node'],
-               ['node']], dtype=object)
+        array([['node'], ['node']], dtype='<U6')
         """
         try:
             self._dataset[data_variable]
@@ -989,14 +977,13 @@ class DataRecord:
                     )
                 assoc_element_id = new_value
                 assoc_grid_element = self.get_data(time, item_id, "grid_element")[0]
-            self._check_grid_element_and_id(assoc_grid_element, assoc_element_id)
+
+            _ = norm_grid_element(assoc_grid_element, allowed=self._permitted_locations)
+
             if assoc_element_id >= self._grid[assoc_grid_element].size:
                 raise ValueError(
-                    "The location "
-                    + assoc_grid_element
-                    + " "
-                    + str(assoc_element_id)
-                    + " does not exist on this grid"
+                    f"The location {assoc_grid_element} {assoc_element_id}"
+                    " does not exist on this grid"
                 )
 
         if time is None:
@@ -1240,9 +1227,7 @@ class DataRecord:
         >>> dr3.dataset["element_id"].values
         array([[1], [3]])
         >>> dr3.dataset["grid_element"].values
-        array([['node'],
-               ['link']],
-              dtype='<U4')
+        array([['node'], ['link']], dtype='<U6')
 
         Next add some new items at a new time.
 
@@ -1385,3 +1370,88 @@ class DataRecord:
             return np.nan
         else:
             return sorted(self.time_coordinates)[-2]
+
+
+def norm_element_id(ids: ArrayLike) -> NDArray[np.intp]:
+    """Normalize element IDs to a 1-D array of ``np.intp``.
+
+    Parameters
+    ----------
+    ids : array_like
+        Element IDs.
+
+    Returns
+    -------
+    ndarray of intp, shape (n_ids,)
+        Normalized element IDs with dtype ``np.intp``.
+
+    Raises
+    ------
+    ValueError
+        If ``ids`` cannot be safely interpreted as integers.
+
+    Examples
+    --------
+    >>> norm_element_id([0, 1, 2])
+    array([0, 1, 2])
+
+    >>> norm_element_id(5)
+    array([5])
+
+    >>> ids = norm_element_id(np.array([1, 2], dtype=np.int32))
+    >>> ids.dtype == np.intp
+    True
+    """
+    with raise_as(ValueError):
+        ids = require_dtype(np.asarray(np.atleast_1d(ids)), dtype=np.integer)
+    return ids.astype(np.intp, copy=False)
+
+
+def norm_grid_element(
+    elements: ArrayLike,
+    *,
+    allowed: Iterable[str] = (),
+) -> NDArray[np.str_]:
+    """Normalize grid element names to a NumPy string array.
+
+    Parameters
+    ----------
+    elements : array_like of str or str
+        Grid element name(s). A scalar string is treated as a single-element array.
+    allowed : iterable of str, optional
+        Valid grid element names. If provided, all values in ``elements`` must
+        be contained in ``allowed``.
+
+    Returns
+    -------
+    ndarray of str, shape (n_elements,)
+        Normalized grid element names.
+
+    Raises
+    ------
+    ValueError
+        If any value in ``elements`` is not in ``allowed``.
+
+    Examples
+    --------
+    >>> norm_grid_element("node")
+    array(['node'], dtype='<U4')
+
+    >>> norm_grid_element(["node", "link"])
+    array(['node', 'link'], dtype='<U4')
+
+    >>> norm_grid_element(["node", "link"], allowed=["node", "link", "patch"])
+    array(['node', 'link'], dtype='<U5')
+    """
+    allowed = set(allowed)
+
+    ge_dtype = f"<U{max(len(x) for x in allowed)}" if allowed else str
+    elements = np.asarray(
+        [elements] if isinstance(elements, str) else elements,
+        dtype=ge_dtype,
+    )
+
+    if allowed and not set(np.unique(elements)) <= allowed:
+        raise ValueError("elements must contain valid locations for this grid type.")
+
+    return elements
