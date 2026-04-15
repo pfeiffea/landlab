@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 from collections.abc import Iterable
+from collections.abc import Mapping
 
 import numpy as np
 import xarray as xr
 from numpy.typing import ArrayLike
 from numpy.typing import NDArray
 from requireit import raise_as
+from requireit import require_contains
 from requireit import require_dtype
+from requireit import require_one_of
+from requireit import require_shape
+from requireit import require_sorted
 
 
 class DataRecord:
@@ -71,7 +76,7 @@ class DataRecord:
         self,
         grid,
         dummy_elements=None,
-        time=None,
+        time: ArrayLike | None = None,
         items=None,
         data_vars=None,
         attrs=None,
@@ -219,6 +224,15 @@ class DataRecord:
         1       0.0          link           3
 
         """
+        with_time = False
+        if time is not None:
+            with_time = True
+            time = self._norm_time(time)
+
+        # set attributes, if any
+        attrs = attrs or {}
+        if not isinstance(attrs, Mapping):
+            raise TypeError("Attributes (attrs) passed to DataRecord must be a mapping")
 
         # save a reference to the grid
         self._grid = grid
@@ -230,126 +244,93 @@ class DataRecord:
         # check dummies and reformat into {"node": [0, 1, 2]}
         self._dummy_elements = dummy_elements or {}
         for at in self._permitted_locations:
-            for item in self._dummy_elements.get(at, []):
-                if (item < self._grid[at].size) and (item >= 0):
-                    raise ValueError(f"Dummy id {at} {item} invalid")
-
-        # set initial time coordinates, if any
-        n_times = 0
-        if isinstance(time, (list, np.ndarray)):
-            self._times = np.array(time)
-            n_times = len(self._times)
-        elif time is not None:
-            raise TypeError("time must be a list or numpy array")
+            size = self._grid[at].size
+            for item in self._dummy_elements.get(at, ()):
+                if 0 <= item < size:
+                    raise ValueError(
+                        f"dummy id {at} {item} must be outside valid range [0, {size})"
+                    )
 
         # set initial items, if any
         if items is not None:
-            try:
-                items.keys()
-            except AttributeError as exc:
-                # items is not a dict
-                raise TypeError(
-                    "You must provide an `items` dictionary "
-                    "(see documentation for required format)"
-                ) from exc
-            try:
-                _grid_elements, _element_ids = (
-                    items["grid_element"],
-                    items["element_id"],
+            if not isinstance(items, Mapping):
+                raise TypeError("items must be mapping")
+
+            with raise_as(TypeError):
+                require_contains(
+                    items, required=("grid_element", "element_id"), name="items"
                 )
-            except KeyError as exc:
-                # grid_element and/or element_id not provided
-                raise TypeError(
-                    "You must provide an `items` dictionary,"
-                    "(see documentation for required format)"
-                ) from exc
+            grid_elements = items["grid_element"]
+            element_ids = items["element_id"]
 
-            self._number_of_items = len(_element_ids)
+            n_items = len(element_ids)
 
-            shape = (self._number_of_items,)
-            if n_times:
-                shape += (n_times,)
+            if with_time:
+                shape = (n_items, len(time))
+            else:
+                shape = (n_items,)
 
             # check that grid_element and element_id exist on the grid and
             # have valid format:
-            _grid_elements, _element_ids = self._norm_elements_and_ids(
-                _grid_elements, _element_ids
+            grid_elements, element_ids = self._norm_elements_and_ids(
+                grid_elements, element_ids
             )
 
-            _grid_elements, _element_ids = self._broadcast_elements_and_ids(
-                _grid_elements, _element_ids, shape=shape
+            grid_elements, element_ids = self._broadcast_elements_and_ids(
+                grid_elements, element_ids, shape=shape
             )
 
             # check that element IDs do not exceed number of elements
             # on the grid:
-            self._check_element_id_values(_grid_elements, _element_ids)
+            self._check_element_ids(grid_elements, element_ids)
 
-            # create coordinates for the dimension 'item_id':
-            self._item_ids = np.array(range(self._number_of_items), dtype=int)
+            dims = ("item_id",)
+            coords = {"item_id": np.arange(n_items, dtype=np.intp)}
 
-            # create initial dictionaries of variables:
-            if time is not None:
-                data_vars_dict = {
-                    "grid_element": (["item_id", "time"], _grid_elements),
-                    "element_id": (
-                        ["item_id", "time"],
-                        _element_ids,
-                        {"dtype": int},
-                    ),
-                }
-                coords = {"time": self._times, "item_id": self._item_ids}
-            else:
-                # no time
-                data_vars_dict = {
-                    "grid_element": (["item_id"], _grid_elements),
-                    "element_id": (["item_id"], _element_ids, {"dtype": int}),
-                }
-                coords = {"item_id": self._item_ids}
+            if with_time:
+                dims += ("time",)
+                coords["time"] = time
+
+            data_vars_dict = {
+                "grid_element": (dims, grid_elements),
+                "element_id": (dims, element_ids, {"dtype": np.intp}),
+            }
 
         else:
             # no items, initial dictionary of variables is empty:
             data_vars_dict = {}
-            if time is not None:
-                coords = {"time": self._times}
-            else:  # no item and no time = no dimension
-                coords = {}
+            coords = {"time": time} if with_time else {}
 
         # set variables, if any
         if data_vars is not None:
-            try:
-                # check format (dict)
-                data_vars.keys()
-            except AttributeError as exc:
-                raise TypeError(
-                    "Data variables (data_vars) passed to "
-                    "DataRecord must be a dictionary (see "
-                    "documentation for valid structure)"
-                ) from exc
-            for key in data_vars.keys():
-                # check dict structure and dims:
-                if data_vars[key][0] not in (
-                    ["time"],
-                    ["item_id"],
-                    ["time", "item_id"],
-                    ["item_id", "time"],
-                ):
-                    raise ValueError(
-                        "Data variable dimensions must be " "time and/or item_id"
-                    )
+            if not isinstance(data_vars, Mapping):
+                raise TypeError("data_vars must be mapping")
+
+            valid_dims = {("item_id",)}
+            if with_time:
+                valid_dims |= {("time",), ("time", "item_id"), ("item_id", "time")}
+
+            for key in data_vars:
+                dims = tuple(data_vars[key][0])
+                with raise_as(ValueError):
+                    require_one_of(dims, allowed=valid_dims)
 
             # create complete dictionary of variables
             # (= initial data_vars_dict + additional user-defined data_vars):
             data_vars_dict.update(data_vars)
 
-        # set attributes, if any
-        attrs = attrs or {}
-        if not isinstance(attrs, dict):
-            raise TypeError(
-                "Attributes (attrs) passed to DataRecord" "must be a dictionary"
-            )
-
         # create an xarray Dataset:
         self._dataset = xr.Dataset(data_vars=data_vars_dict, coords=coords, attrs=attrs)
+
+    def _norm_time(self, time: ArrayLike) -> NDArray[np.floating]:
+        time = np.atleast_1d(time)
+
+        with raise_as(TypeError):
+            require_dtype(time, dtype=float, allow_cast=True, name="time")
+        require_shape(time, shape=("n_times",), name="time")
+        require_sorted(time, strict=True, name="time")
+
+        return np.asarray(time, dtype=float)
 
     def _norm_elements_and_ids(
         self,
@@ -372,31 +353,28 @@ class DataRecord:
             np.broadcast_to(ids, shape).copy(),
         )
 
-    def _check_element_id_values(self, grid_element, element_id):
+    def _check_element_ids(
+        self,
+        elements: NDArray[np.str_],
+        ids: NDArray[np.integer],
+    ) -> None:
         """Check that element_id values are valid."""
+        require_dtype(ids, dtype=np.integer, name="ids")
+
         for at in self._permitted_locations:
-            max_size = self._grid[at].size
+            selected = ids[elements == at]
+            if selected.size == 0:
+                continue
 
-            # this needs to work with 2d arrays (rows, col = np.where (so grid
-            # element always needs to be at least 2d.))
-            ind = np.nonzero(grid_element == at)
-            selected_elements = element_id[ind]
+            size = self._grid[at].size
+            dummy_values = self._dummy_elements.get(at, ())
 
-            if selected_elements.size > 0:
-                dummy_values = self._dummy_elements.get(at, [])
-                index_values = np.arange(0, max_size)
-                valid_values = np.concatenate((dummy_values, index_values))
+            invalid = (selected < 0) | (selected >= size)
+            if dummy_values:
+                invalid &= ~np.isin(selected, dummy_values)
 
-                valid_elements = np.isin(selected_elements, valid_values)
-
-                if not np.all(valid_elements):
-                    raise ValueError("Invalid element_ids provided.")
-
-        if not np.issubdtype(element_id.dtype, np.integer):
-            raise ValueError(
-                "You have passed a non-integer element_id to "
-                "DataRecord, this is not permitted"
-            )
+            if np.any(invalid):
+                raise ValueError(f"invalid ids for grid element {at!r}.")
 
     def add_record(self, time=None, item_id=None, new_item_loc=None, new_record=None):
         """Add a new record to the DataRecord.
@@ -537,7 +515,7 @@ class DataRecord:
 
                         # check that element IDs do not exceed number
                         # of elements on this grid:
-                        self._check_element_id_values(new_grid_element, new_element_id)
+                        self._check_element_ids(new_grid_element, new_element_id)
 
                         _new_data_vars = {
                             "grid_element": (["item_id", "time"], new_grid_element),
@@ -744,7 +722,7 @@ class DataRecord:
 
                 # check that element IDs do not exceed number
                 # of elements on this grid
-                self._check_element_id_values(_grid_elements, _element_ids)
+                self._check_element_ids(_grid_elements, _element_ids)
 
                 data_vars_dict = {
                     "grid_element": (["item_id", "time"], _grid_elements),
@@ -761,7 +739,7 @@ class DataRecord:
             )
             # check that element IDs do not exceed number of
             # elements on this grid
-            self._check_element_id_values(_grid_elements, _element_ids)
+            self._check_element_ids(_grid_elements, _element_ids)
 
             data_vars_dict = {
                 "grid_element": (["item_id"], _grid_elements),
