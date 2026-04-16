@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from collections.abc import Iterable
 from collections.abc import Mapping
+from typing import Any
 
 import numpy as np
 import xarray as xr
@@ -346,6 +347,7 @@ class DataRecord:
         self,
         elements: NDArray[np.str_],
         ids: NDArray[np.intp],
+        *,
         shape: tuple[int, ...],
     ) -> tuple[NDArray[np.str_], NDArray[np.intp]]:
         return (
@@ -567,188 +569,136 @@ class DataRecord:
         # merge new record and original dataset
         self._dataset = xr.merge((self._dataset, ds_to_add), compat="no_conflicts")
 
-    def add_item(self, time=None, new_item=None, new_item_spec=None):
-        """Add new item(s) to the current DataRecord.
+    def add_item(
+        self,
+        time: ArrayLike | None = None,
+        new_item: dict[str, Any] | None = None,
+        new_item_spec: dict[str, Any] | None = None,
+    ) -> None:
+        """Add new items to a DataRecord.
 
         Parameters
         ----------
-        time : list or 1-D array of float or int
-            Time step at which the items are to be added.
-        new_item : dict
-            Structure is:
+        time : array_like of number, optional
+            Time coordinate(s) for the new items. Required if this DataRecord has
+            a ``time`` dimension and must be ``None`` otherwise.
+        new_item : mapping
+            Mapping that defines the new items. Must contain the keys
+            ``"grid_element"`` and ``"element_id"``.
+        new_item_spec : mapping, optional
+            Additional variables to add for the new items, in xarray-style
+            ``{name: (dims, values)}`` form.
 
-            .. code-block:: python
-
-                {"grid_element": [grid_element], "element_id": [element_id]}
-
-            where:
-
-                - [grid_element] is str or number-of-items long array
-                  containing strings of the grid element(s) on which the items
-                  live. Valid locations depend on the grid type. If provided as
-                  a string it is assumed that all items live on the same type of
-                  grid element.
-                - [element_id] is an array of integers identifying the grid
-                  element ID on which each item resides.
-
-            An example argument would be:
-
-            .. code-block:: python
-
-                {
-                    "grid_element": numpy.array([["node"], ["node"], ["link"]]),
-                    "element_id": numpy.array([[1], [5], [1]]),
-                }
-
-        new_item_spec : dict (optional)
-            Dictionary containing any data variables (other than
-            'grid_element' and 'element_id') relating to the new item(s) to be
-            added. Structure is:
-
-            .. code-block:: python
-
-                {"variable_name_1": (["dimensions"], variable_data_1)}
-
-            where:
-
-                - 'variable_name_1' : name of the (potentially new) variable
-                - ['dimensions'] : dimension(s) along which the new record
-                  varies; can be ['time'], ['item_id] or ['item_id', 'time']
-                - variable_data_1 : new data array, size must match the
-                  variable dimension(s)
+        Notes
+        -----
+        New items are assigned consecutive ``item_id`` values. For time-dependent
+        records, ``grid_element`` and ``element_id`` are broadcast over the new
+        ``item_id`` and ``time`` coordinates as needed before merging into the
+        underlying dataset.
 
         Examples
         --------
         >>> import numpy as np
         >>> from landlab import RasterModelGrid
         >>> from landlab.data_record import DataRecord
+
+        Create a time-independent DataRecord with two items:
+
         >>> grid = RasterModelGrid((3, 3))
+        >>> items = {
+        ...     "grid_element": ["node", "node"],
+        ...     "element_id": [1, 3],
+        ... }
+        >>> dr = DataRecord(grid, items=items)
 
-        Example of a DataRecord with dimensions time and item_id:
+        Add two new items:
 
-        >>> my_items3 = {
+        >>> dr.add_item(
+        ...     new_item={
+        ...         "grid_element": ["node", "node"],
+        ...         "element_id": [4, 5],
+        ...     }
+        ... )
+        >>> dr.number_of_items
+        4
+
+        Create a time-dependent DataRecord with one time coordinate:
+
+        >>> items = {
         ...     "grid_element": np.array([["node"], ["link"]]),
         ...     "element_id": np.array([[1], [3]]),
         ... }
+        >>> dr = DataRecord(grid, time=[0.0], items=items)
 
-        Note that both arrays have 2 dimensions as they vary along dimensions
-        'time' and 'item_id'.
+        Add two new items at a new time:
 
-        >>> dr3 = DataRecord(grid, time=[0.0], items=my_items3)
-
-        Items can be added to a DataRecord that already holds similar items,
-        using the method 'add_item':
-
-        >>> dr3.add_item(
+        >>> dr.add_item(
         ...     time=[1.0],
         ...     new_item={
-        ...         "grid_element": np.array([["node"], ["node"]]),
-        ...         "element_id": np.array([[4], [4]]),
+        ...         "grid_element": [["node"], ["node"]],
+        ...         "element_id": [[4], [5]],
         ...     },
-        ...     new_item_spec={"size": (["item_id", "time"], [[10], [5]])},
+        ...     new_item_spec={
+        ...         "size": (["item_id", "time"], [[10], [5]]),
+        ...     },
         ... )
-
-        Two items have been added at a new timestep 1.0:
-
-        >>> dr3.number_of_items
+        >>> dr.number_of_items
         4
-        >>> dr3.time_coordinates
+
+        The time coordinate is extended:
+
+        >>> dr.time_coordinates
         [0.0, 1.0]
 
-        If a data variable is also added with the new items ('size' in this
-        example), the values for this variable are filled with 'nan' for the
-        pre-existing items:
+        Values for a new variable are defined only for the new items at the new time:
 
-        >>> dr3.dataset["size"][:, 1].values
+        >>> dr.dataset["size"][:, 1].values
         array([nan, nan, 10.,  5.])
-
-        The previous line calls the values of the variable 'size', for all
-        items, at time=1; the first two items don't have a value for the
-        variable 'size'.
         """
-        if time is None and "time" in self._dataset["grid_element"].coords:
-            raise ValueError(
-                "The items previously defined in this DataRecord"
-                ' have dimensions "time" and "item_id", '
-                'you must provide a "time" for the new item(s)'
+        has_time = "time" in self._dataset
+
+        if time is None and has_time:
+            raise ValueError("time is required for a time-dependent DataRecord")
+        if time is not None and not has_time:
+            raise KeyError("time must be None for a time-independent DataRecord")
+        if not isinstance(new_item, Mapping):
+            raise TypeError("new_item must be a mapping")
+
+        time = self._norm_time(time) if has_time else None
+
+        new_item_spec = {} if new_item_spec is None else dict(new_item_spec)
+
+        with raise_as(KeyError):
+            require_contains(
+                new_item, required=("grid_element", "element_id"), name="new_item"
             )
+        elements = new_item["grid_element"]
+        ids = new_item["element_id"]
 
-        if not isinstance(new_item, dict):
-            raise TypeError(
-                "You must provide an new_item dictionary "
-                "(see documentation for required format)"
-            )
+        elements, ids = self._norm_elements_and_ids(elements, ids)
+        self._check_element_ids(elements, ids)
 
-        try:
-            # check that dict contains correct entries
-            _grid_elements, _element_ids = (
-                new_item["grid_element"],
-                new_item["element_id"],
-            )
-
-        except KeyError as exc:
-            raise KeyError(
-                "You must provide a new_item dictionary "
-                "(see documentation for required format)"
-            ) from exc
-
-        number_of_new_items = len(new_item["element_id"])
-        # first id of new item = last item in existing datarecord+1
-        new_first_item_id = self._dataset["item_id"][-1].values + 1
-        new_item_ids = np.array(
-            range(new_first_item_id, new_first_item_id + number_of_new_items)
-        )
-
-        if time is not None:
-            try:
-                self._dataset["time"]
-            except KeyError as exc:
-                raise KeyError("This DataRecord does not record time") from exc
-            if not isinstance(time, (list, np.ndarray)):
-                raise TypeError(
-                    "You have passed a time that is not "
-                    "permitted, must be list or a 1-D array"
-                )
-            else:
-                coords_to_add = {
-                    "time": np.array(time),
-                    "item_id": np.array(new_item_ids),
-                }
-                # check that grid_element and element_id exist
-                # on the grid and have valid format
-                _grid_elements, _element_ids = self._norm_elements_and_ids(
-                    _grid_elements, _element_ids
-                )
-
-                # check that element IDs do not exceed number
-                # of elements on this grid
-                self._check_element_ids(_grid_elements, _element_ids)
-
-                data_vars_dict = {
-                    "grid_element": (["item_id", "time"], _grid_elements),
-                    "element_id": (["item_id", "time"], _element_ids),
-                }
-
+        n_existing = len(self._dataset["item_id"])
+        if n_existing == 0:
+            new_item_ids = np.arange(len(ids), dtype=np.intp)
         else:
-            # no time
-            coords_to_add = {"item_id": np.array(new_item_ids)}
-            # check that grid_element and element_id exist on
-            # the grid and have valid format:
-            _grid_elements, _element_ids = self._norm_elements_and_ids(
-                _grid_elements, _element_ids
-            )
-            # check that element IDs do not exceed number of
-            # elements on this grid
-            self._check_element_ids(_grid_elements, _element_ids)
+            start = self._dataset["item_id"][-1] + 1
+            new_item_ids = np.arange(start, start + len(ids), dtype=np.intp)
 
-            data_vars_dict = {
-                "grid_element": (["item_id"], _grid_elements),
-                "element_id": (["item_id"], _element_ids),
-            }
+        coords_to_add = {"item_id": new_item_ids}
+        dims = ("item_id",)
+        shape = (len(ids),)
+        if has_time:
+            coords_to_add["time"] = time
+            dims += ("time",)
+            shape += (len(time),)
+
+        elements, ids = self._broadcast_elements_and_ids(elements, ids, shape=shape)
+
+        data_vars_dict = {"grid_element": (dims, elements), "element_id": (dims, ids)}
 
         # other variables:
-        if new_item_spec is not None:
-            data_vars_dict.update(new_item_spec)
+        data_vars_dict.update(new_item_spec)
 
         # Dataset of new record:
         ds_to_add = xr.Dataset(data_vars=data_vars_dict, coords=coords_to_add)
