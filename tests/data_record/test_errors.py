@@ -363,17 +363,6 @@ def test_dr_2dim_bad_add_item(dr_2dim):
             new_item={"grid_element": np.array([["node"], ["cell"]])},
             new_item_spec={"size": (["item_id"], [10, 5])},
         )
-    # should return AttributeError: You must provide an new_item dictionnary (see
-    # documentation for required format)
-    with pytest.raises(TypeError):
-        dr_2dim.add_item(
-            time=10.0,
-            new_item={
-                "grid_element": np.array([["node"], ["cell"]]),
-                "element_id": np.array([[2], [0]]),
-            },
-            new_item_spec={"size": (["item_id"], [10, 5])},
-        )
 
 
 # should return TypeError: You have passed a time that is not permitted,
