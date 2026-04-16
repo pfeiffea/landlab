@@ -689,7 +689,6 @@ class NetworkSedimentTransporter(Component):
                 ]
 
                 if downstream_link_id[n] == self._grid.BAD_INDEX:
-                    # I'm sure there's a better way to do this, but...
                     length_of_downstream_link = 0
                     width_of_downstream_link = 0
                 else:
@@ -941,36 +940,54 @@ class NetworkSedimentTransporter(Component):
             Volarray[vol_act_array != 0.0] / vol_act_array[vol_act_array != 0.0]
         )
 
-        b = 0.67 / (1.0 + np.exp(1.5 - Darray / D50_activearray))
+        b = 0.67 / (1.0 + np.exp(1.5 - Darray / D50_activearray)) # WC Eqn 4
 
         # b = 0 # sensitivity analysis: turn off hiding function
 
         tau = self._fluid_density * self._g * Harray * Sarray
         tau = np.atleast_1d(tau)
 
-        taur = taursg * (Darray / D50_activearray) ** b
+        taur = taursg * (Darray / D50_activearray) ** b # WC Eqn 3
         tautaur = tau / taur
         self._tautaur = tautaur.copy()  # use below for xport dependent abrasion
         tautaur_cplx = tautaur.astype(np.complex128)
         # ^ work around needed b/c np fails with non-integer powers of negative numbers
 
+        # WC Eqn 7
         W = 0.002 * np.power(tautaur_cplx.real, 7.5)
         W[tautaur >= 1.35] = 14 * np.power(
             (1 - (0.894 / np.sqrt(tautaur_cplx.real[tautaur >= 1.35]))), 4.5
         )
 
+        self._Wstari = W # To allow check against WC fig
+
         active_parcel_idx = Activearray == _ACTIVE
 
-        # compute parcel virtual velocity, m/s
-        self._pvelocity[active_parcel_idx] = (
-            W.real[active_parcel_idx]
-            * (tau[active_parcel_idx] ** (3.0 / 2.0))
-            * frac_parcel[active_parcel_idx]
-            / (self._fluid_density ** (3.0 / 2.0))
-            / self._g
-            / R[active_parcel_idx]
-            / active_layer_thickness_array[active_parcel_idx]
-        )
+
+        # ALLISON CHECKING
+        qbi = (W.real[active_parcel_idx]
+               * frac_parcel[active_parcel_idx]
+               * (tau[active_parcel_idx]/self._fluid_density)**(3/2)
+               / (Rhoarray[active_parcel_idx]/self._fluid_density -1)
+               / self._g
+        ) # (m2/s) WC eqn 2
+
+        self._pvelocity[active_parcel_idx]=(
+            qbi
+            /active_layer_thickness_array[active_parcel_idx]
+        ) # (m/s)
+
+
+        # # compute parcel virtual velocity, m/s 
+        # self._pvelocity[active_parcel_idx] = (
+        #     W.real[active_parcel_idx]
+        #     * (tau[active_parcel_idx] ** (3.0 / 2.0))
+        #     * frac_parcel[active_parcel_idx]
+        #     / (self._fluid_density ** (3.0 / 2.0))
+        #     / self._g
+        #     / R[active_parcel_idx]
+        #     / active_layer_thickness_array[active_parcel_idx]
+        # )
 
         self._pvelocity[np.isnan(self._pvelocity)] = 0.0
 
@@ -1289,8 +1306,8 @@ def _calculate_reference_shear_stress(
     median_active_grain_size: ArrayLike,
     frac_sand: ArrayLike,
 ) -> float:
-    """Calculate reference Shields stress (taursg) using the sand content of
-    the bed surface, as per Wilcock and Crowe (2003).
+    """Calculate dimensional reference shear stress (taursg) using the sand content of
+    the bed surface, as per Wilcock and Crowe (2003), Eqn 5 and 6.
 
     Parameters
     ----------
@@ -1324,7 +1341,7 @@ def _calculate_reference_shear_stress(
 
     if np.any(np.asarray(taursg < 0)):
         raise ValueError(
-            "NetworkSedimentTransporter: Reference Shields stress is negative"
+            "NetworkSedimentTransporter: Reference shear stress is negative"
             + " taursg = "
             + str(taursg)
         )
