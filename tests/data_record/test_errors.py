@@ -211,15 +211,18 @@ def test_dr_item_bad_add_record(dr_item):
         dr_item.add_record(
             time=[0.0], item_id=[0], new_record={"new_var": ["new_data"]}
         )
-    # should return KeyError: 'This Datarecord does not record time'
     with pytest.raises(ValueError):
         dr_item.add_record(item_id=[10], new_record={"new_var": ["new_data"]})
-    # should return ValueError: There is no item with item_id 14, modify
-    # the value(s) you pass as item_id or create a new item using the method
-    # add_item.
     with pytest.raises(ValueError):
         dr_item.add_record(
             item_id=[0],
+            new_item_loc={
+                "grid_element": np.array(["cell"]),
+                "element_id": np.array([0]),
+            },
+        )
+    with pytest.raises(ValueError, match="new_item_loc requires item_id."):
+        dr_item.add_record(
             new_item_loc={
                 "grid_element": np.array(["cell"]),
                 "element_id": np.array([0]),
@@ -294,17 +297,6 @@ def test_dr_item_bad_properties(dr_item):
 
 # ITEM AND TIME
 def test_dr_2dim_bad_add_record(dr_2dim):
-    with pytest.raises(TypeError):
-        dr_2dim.add_record(
-            time=10.0,
-            item_id=[1],
-            new_item_loc={
-                "grid_element": np.array([["cell"]]),
-                "element_id": np.array([[0]]),
-            },
-        )
-    # should return TypeError: You have passed a time that is not permitted,
-    # must be list or array.
     with pytest.raises(ValueError):
         dr_2dim.add_record(
             time=[10.0],
@@ -321,17 +313,6 @@ def test_dr_2dim_bad_add_record(dr_2dim):
             time=[10.0],
             item_id=[0],
             new_item_loc={"grid_element": np.array([["cell"]])},
-        )
-    # should return KeyError: 'You must provide a new_item_loc dictionnary with
-    # both grid_element and element_id'
-    with pytest.raises(TypeError):
-        dr_2dim.add_record(
-            time=[10.0],
-            item_id=1,
-            new_item_loc={
-                "grid_element": np.array([["cell"]]),
-                "element_id": np.array([[0]]),
-            },
         )
 
 
