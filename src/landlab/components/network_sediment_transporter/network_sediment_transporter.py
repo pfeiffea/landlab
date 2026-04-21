@@ -26,7 +26,7 @@ from landlab.data_record.aggregators import aggregate_items_as_sum
 from landlab.data_record.data_record import DataRecord
 from landlab.grid.network import NetworkModelGrid
 
-_SUPPORTED_TRANSPORT_METHODS = frozenset(("WilcockCrowe", "WilcockCroweD50"))
+_SUPPORTED_TRANSPORT_METHODS = frozenset(("WilcockCrowe", "WilcockCroweD50","WilcockCroweDgm","Parker"))
 _SUPPORTED_ACTIVE_LAYER_METHODS = frozenset(
     ("WongParker", "GrainSizeDependent", "Constant10cm")
 )
@@ -269,7 +269,7 @@ class NetworkSedimentTransporter(Component):
         g: float = scipy.constants.g,
         fluid_density: float = 1000.0,
         transport_method: Literal[
-            "WilcockCrowe", "WilcockCroweD50"
+            "WilcockCrowe", "WilcockCroweD50","WilcockCroweDgm","Parker"
         ] = "WilcockCroweD50",
         active_layer_method: Literal[
             "WongParker", "GrainSizeDependent", "Constant10cm"
@@ -304,7 +304,7 @@ class NetworkSedimentTransporter(Component):
         fluid_density: float, optional
             Density of the fluid (generally, water) in which sediment is
             moving [kg / m^3].
-        transport_method: {"WilcockCrowe","WilcockCroweD50"}, optional
+        transport_method: {"WilcockCrowe","WilcockCroweD50","WilcockCroweDgm","Parker"}, optional
             Sediment transport equation option.
         active_layer_method: {"WongParker", "GrainSizeDependent", "Constant10cm"}, optional
             Option for treating sediment active layer as a constant or variable.
@@ -375,6 +375,12 @@ class NetworkSedimentTransporter(Component):
         if self._transport_method == "WilcockCroweD50":
             self._update_transport_time = self._calc_transport_wilcock_crowe_d50
 
+        if self._transport_method == "WilcockCroweDgm":
+            self._update_transport_time = self._calc_transport_wilcock_crowe_dgm
+
+        if self._transport_method == "Parker":
+            self._update_transport_time = self._calc_transport_parker
+
         if active_layer_method in _SUPPORTED_ACTIVE_LAYER_METHODS:
             self._active_layer_method = active_layer_method
         else:
@@ -419,6 +425,11 @@ class NetworkSedimentTransporter(Component):
     def d50_active(self) -> float:
         """Median parcel grain size of active parcels aggregated at link."""
         return self._d50_active
+    
+    @property
+    def dgm_active(self) -> float:
+        """Geometric mean parcel grain size of active parcels aggregated at link."""
+        return self._dgm_active
 
     @property
     def rhos_mean_active(self) -> float:
@@ -487,7 +498,6 @@ class NetworkSedimentTransporter(Component):
     def _calculate_mean_D_and_rho(self) -> None:
         """Calculate mean grain size and density on each link. Used in init,
         but not during run_one_step.
-
         """
 
         # Note: rhos and d mean aren't filtered for only active parcels,
@@ -509,6 +519,9 @@ class NetworkSedimentTransporter(Component):
         )
 
         self._d50_active = np.full(self.grid.number_of_links, np.nan)
+
+        self._dgm_active = np.full(self.grid.number_of_links, np.nan)
+
         for link in range(self.grid.number_of_links):
             mask_here = self._parcels.dataset.element_id.values[:, -1] == link
             mask_active = self._parcels.dataset.active_layer[:, -1] == 1
@@ -520,6 +533,10 @@ class NetworkSedimentTransporter(Component):
 
             self._d50_active[link] = calculate_x_percentile_grain_size(
                 parcel_D, parcel_vol, 50
+            )
+
+            self._dgm_active[link] = _calculate_geometric_mean_grain_size(
+                parcel_D, parcel_vol
             )
 
         if np.any(np.asarray(self._d50_active < 0)):
@@ -977,6 +994,332 @@ class NetworkSedimentTransporter(Component):
             /active_layer_thickness_array[active_parcel_idx]
         ) # (m/s)
 
+
+        # # compute parcel virtual velocity, m/s 
+        # self._pvelocity[active_parcel_idx] = (
+        #     W.real[active_parcel_idx]
+        #     * (tau[active_parcel_idx] ** (3.0 / 2.0))
+        #     * frac_parcel[active_parcel_idx]
+        #     / (self._fluid_density ** (3.0 / 2.0))
+        #     / self._g
+        #     / R[active_parcel_idx]
+        #     / active_layer_thickness_array[active_parcel_idx]
+        # )
+
+        self._pvelocity[np.isnan(self._pvelocity)] = 0.0
+
+        if np.max(self._pvelocity) > 1:
+            warnings.warn(
+                "NetworkSedimentTransporter: Maximum parcel virtual velocity exceeds 1 m/s",
+                stacklevel=2,
+            )
+
+        # Assign those things to the grid -- might be useful for plotting
+        self._grid.at_link["sediment_total_volume"] = self._vol_tot
+        self._grid.at_link["sediment__active__volume"] = self._vol_act
+        self._grid.at_link["sediment__active__sand_fraction"] = frac_sand
+
+
+    def _calc_transport_wilcock_crowe_dgm(self):
+        """Method to determine the transport time for each parcel in the active
+        layer using a sediment transport equation. This version bases the calculations
+        on the geometric mean grain size.
+
+        """
+        # Initialize _pvelocity, the virtual velocity of each parcel
+        # (link length / link travel time)
+        self._pvelocity = np.zeros(self._num_parcels)
+
+        # parcel attribute arrays from DataRecord
+
+        Darray = self._parcels.dataset.D[:,-1].values
+        Activearray = self._parcels.dataset.active_layer[:,-1].values
+        Rhoarray = self._parcels.dataset.density.values
+        Volarray = self._parcels.dataset.volume[:,-1].values
+        Linkarray = self._parcels.dataset.element_id[
+            :, -1
+        ].values  # link that the parcel is currently in
+
+        R = (Rhoarray - self._fluid_density) / self._fluid_density
+
+        # parcel attribute arrays to populate below
+        frac_sand_array = np.zeros(self._num_parcels)
+        vol_act_array = np.zeros(self._num_parcels)
+        Sarray = np.zeros(self._num_parcels)
+        Harray = np.zeros(self._num_parcels)
+        Larray = np.zeros(self._num_parcels)
+
+        Dgm_activearray = np.full(self._num_parcels, np.nan)
+        active_layer_thickness_array = np.full(self._num_parcels, np.nan)
+
+        # find active sand
+        # since find active already sets all prior timesteps to False, we
+        # can use D for all timesteps here.
+        findactivesand = (
+            self._parcels.dataset.D < _SAND_SIZE
+        ) * self._active_parcel_records
+
+        sand_parcel_volumes = self._parcels.dataset.volume.values[:, -1].copy()
+        sand_parcel_volumes[~findactivesand[:, -1].astype(bool)] = 0.0
+
+        vol_act_sand = aggregate_items_as_sum(
+            self._parcels.dataset["element_id"].values[:, -1].astype(int),
+            sand_parcel_volumes,
+            size=self._grid.number_of_links,
+        )
+
+        frac_sand = np.zeros_like(self._vol_act)
+        frac_sand[self._vol_act != 0.0] = (
+            vol_act_sand[self._vol_act != 0.0] / self._vol_act[self._vol_act != 0.0]
+        )
+        frac_sand[np.isnan(frac_sand)] = 0.0
+
+        # Calc attributes for each link, map to parcel arrays
+        for i in range(self._grid.number_of_links):
+            active_here = np.nonzero(
+                np.logical_and(Linkarray == i, Activearray == _ACTIVE)
+            )[0]
+            d_act_i = Darray[active_here]
+            vol_act_i = Volarray[active_here]
+            rhos_act_i = Rhoarray[active_here]
+            vol_act_tot_i = np.sum(vol_act_i)
+
+            self._dgm_active[i]= _calculate_geometric_mean_grain_size(
+                d_act_i, vol_act_i
+            )
+
+            if vol_act_tot_i > 0:
+                self._rhos_mean_active[i] = np.sum(rhos_act_i * vol_act_i) / (
+                    vol_act_tot_i
+                )
+            else:
+                self._rhos_mean_active[i] = np.nan
+
+            Dgm_activearray[Linkarray == i] = self._dgm_active[i]
+            frac_sand_array[Linkarray == i] = frac_sand[i]
+            vol_act_array[Linkarray == i] = self._vol_act[i]
+            Sarray[Linkarray == i] = self._grid.at_link["channel_slope"][i]
+            Harray[Linkarray == i] = self._grid.at_link["flow_depth"][i]
+            Larray[Linkarray == i] = self._grid.at_link["reach_length"][i]
+            active_layer_thickness_array[Linkarray == i] = self._active_layer_thickness[
+                i
+            ]
+
+        # Wilcock and Crowe calculate transport for all parcels (active and inactive)
+        taursg = _calculate_reference_shear_stress(
+            self._fluid_density, R, self._g, Dgm_activearray, frac_sand_array
+        )
+
+        frac_parcel = np.nan * np.zeros_like(Volarray)
+        frac_parcel[vol_act_array != 0.0] = (
+            Volarray[vol_act_array != 0.0] / vol_act_array[vol_act_array != 0.0]
+        )
+
+        b = 0.67 / (1.0 + np.exp(1.5 - Darray / Dgm_activearray)) # WC Eqn 4
+
+        # b = 0 # sensitivity analysis: turn off hiding function
+
+        tau = self._fluid_density * self._g * Harray * Sarray
+        tau = np.atleast_1d(tau)
+
+        taur = taursg * (Darray / Dgm_activearray) ** b # WC Eqn 3
+        tautaur = tau / taur
+        self._tautaur = tautaur.copy()  # use below for xport dependent abrasion
+        tautaur_cplx = tautaur.astype(np.complex128)
+        # ^ work around needed b/c np fails with non-integer powers of negative numbers
+
+        # WC Eqn 7
+        W = 0.002 * np.power(tautaur_cplx.real, 7.5)
+        W[tautaur >= 1.35] = 14 * np.power(
+            (1 - (0.894 / np.sqrt(tautaur_cplx.real[tautaur >= 1.35]))), 4.5
+        )
+
+        self._Wstari = W # To allow check against WC fig
+
+        active_parcel_idx = Activearray == _ACTIVE
+
+
+        # ALLISON CHECKING
+        qbi = (W.real[active_parcel_idx]
+               * frac_parcel[active_parcel_idx]
+               * (tau[active_parcel_idx]/self._fluid_density)**(3/2)
+               / (Rhoarray[active_parcel_idx]/self._fluid_density -1)
+               / self._g
+        ) # (m2/s) WC eqn 2
+
+        self._pvelocity[active_parcel_idx]=(
+            qbi
+            /active_layer_thickness_array[active_parcel_idx]
+        ) # (m/s)
+
+
+        # # compute parcel virtual velocity, m/s 
+        # self._pvelocity[active_parcel_idx] = (
+        #     W.real[active_parcel_idx]
+        #     * (tau[active_parcel_idx] ** (3.0 / 2.0))
+        #     * frac_parcel[active_parcel_idx]
+        #     / (self._fluid_density ** (3.0 / 2.0))
+        #     / self._g
+        #     / R[active_parcel_idx]
+        #     / active_layer_thickness_array[active_parcel_idx]
+        # )
+
+        self._pvelocity[np.isnan(self._pvelocity)] = 0.0
+
+        if np.max(self._pvelocity) > 1:
+            warnings.warn(
+                "NetworkSedimentTransporter: Maximum parcel virtual velocity exceeds 1 m/s",
+                stacklevel=2,
+            )
+
+        # Assign those things to the grid -- might be useful for plotting
+        self._grid.at_link["sediment_total_volume"] = self._vol_tot
+        self._grid.at_link["sediment__active__volume"] = self._vol_act
+        self._grid.at_link["sediment__active__sand_fraction"] = frac_sand
+
+
+    def _calc_transport_parker(self):
+        """Method to determine the transport time for each parcel in the active
+        layer using the Parker 1990 sediment transport equations. 
+
+        """
+        # Initialize _pvelocity, the virtual velocity of each parcel
+        # (link length / link travel time)
+        self._pvelocity = np.zeros(self._num_parcels)
+
+        # parcel attribute arrays from DataRecord
+
+        Darray = self._parcels.dataset.D[:,-1].values
+        Activearray = self._parcels.dataset.active_layer[:,-1].values
+        Rhoarray = self._parcels.dataset.density.values
+        Volarray = self._parcels.dataset.volume[:,-1].values
+        Linkarray = self._parcels.dataset.element_id[
+            :, -1
+        ].values  # link that the parcel is currently in
+
+        R = (Rhoarray - self._fluid_density) / self._fluid_density
+
+        # parcel attribute arrays to populate below
+        frac_sand_array = np.zeros(self._num_parcels) # not used in Parker
+        vol_act_array = np.zeros(self._num_parcels)
+        Sarray = np.zeros(self._num_parcels)
+        Harray = np.zeros(self._num_parcels)
+        Larray = np.zeros(self._num_parcels)
+        Sigma_array = np.zeros(self._num_parcels)
+
+        Dgm_activearray = np.full(self._num_parcels, np.nan)
+        active_layer_thickness_array = np.full(self._num_parcels, np.nan)
+
+        # find active sand
+        # since find active already sets all prior timesteps to False, we
+        # can use D for all timesteps here.
+        findactivesand = (
+            self._parcels.dataset.D < _SAND_SIZE
+        ) * self._active_parcel_records
+
+        sand_parcel_volumes = self._parcels.dataset.volume.values[:, -1].copy()
+        sand_parcel_volumes[~findactivesand[:, -1].astype(bool)] = 0.0
+
+        vol_act_sand = aggregate_items_as_sum(
+            self._parcels.dataset["element_id"].values[:, -1].astype(int),
+            sand_parcel_volumes,
+            size=self._grid.number_of_links,
+        )
+
+        frac_sand = np.zeros_like(self._vol_act)
+        frac_sand[self._vol_act != 0.0] = (
+            vol_act_sand[self._vol_act != 0.0] / self._vol_act[self._vol_act != 0.0]
+        )
+        frac_sand[np.isnan(frac_sand)] = 0.0
+
+        # Calc attributes for each link, map to parcel arrays
+        for i in range(self._grid.number_of_links):
+            active_here = np.nonzero(
+                np.logical_and(Linkarray == i, Activearray == _ACTIVE)
+            )[0]
+            d_act_i = Darray[active_here]
+            vol_act_i = Volarray[active_here]
+            rhos_act_i = Rhoarray[active_here]
+            vol_act_tot_i = np.sum(vol_act_i)
+
+            self._dgm_active[i] = _calculate_geometric_mean_grain_size(
+                d_act_i, vol_act_i
+            )
+
+            # arithmetic stdev2 in phi units, Yager et al 2012, Eqn A7
+            sigma_i = _calculate_arithmetic_stdev(
+                d_act_i,self._dgm_active[i],vol_act_i
+            )
+            
+
+            if vol_act_tot_i > 0:
+                self._rhos_mean_active[i] = np.sum(rhos_act_i * vol_act_i) / (
+                    vol_act_tot_i
+                )
+            else:
+                self._rhos_mean_active[i] = np.nan
+
+            Sigma_array[Linkarray == i] = sigma_i
+            Dgm_activearray[Linkarray == i] = self._dgm_active[i]
+            frac_sand_array[Linkarray == i] = frac_sand[i]
+            vol_act_array[Linkarray == i] = self._vol_act[i]
+            Sarray[Linkarray == i] = self._grid.at_link["channel_slope"][i]
+            Harray[Linkarray == i] = self._grid.at_link["flow_depth"][i]
+            Larray[Linkarray == i] = self._grid.at_link["reach_length"][i]
+            active_layer_thickness_array[Linkarray == i] = self._active_layer_thickness[
+                i
+            ]
+
+        # Parker calculate transport for all parcels (active and inactive)
+        
+        # Shields stress associated with Dgm
+        tau_star_dgm = (Harray*Sarray)/(R* Dgm_activearray)
+
+        tau_star_r = 0.0386
+
+        phi_gmo = tau_star_dgm/tau_star_r # tau*geometricmean/tau*r
+        
+        # "straining functions" omega and sigma, a f(phi_gmo)
+        
+        omega_o_straining, sigma_o_straining = _compute_parker_straining(phi_gmo)
+
+        omega = 1+ (Sigma_array/sigma_o_straining)*(omega_o_straining -1) # Yager A23
+        
+        # hiding function (Yager A21)
+        phi_i = omega * phi_gmo* (Darray/Dgm_activearray)**(-0.0951)
+
+        self._tautaur = phi_i.copy()
+
+        # Piecewise empirical function G: 
+        G_i = 5474*(1-(0.853/phi_i))**4.5
+        G_i[phi_i < 1.59] = np.exp((14.2*(phi_i[phi_i < 1.59]-1))-(9.28*(phi_i[phi_i < 1.59]-1)**2))
+        G_i[phi_i < 1] = phi_i[phi_i < 1]**14.2
+
+        W_i = 0.00218*G_i # Yager A24
+
+        frac_parcel = np.nan * np.zeros_like(Volarray)
+        frac_parcel[vol_act_array != 0.0] = (
+            Volarray[vol_act_array != 0.0] / vol_act_array[vol_act_array != 0.0]
+        )
+
+        self._Wstari = W_i # To allow check against Parker fig
+
+        active_parcel_idx = Activearray == _ACTIVE
+
+        tau = self._fluid_density*self._g*Harray*Sarray
+
+        # ALLISON CHECKING
+        qbi = (W_i.real[active_parcel_idx]
+               * frac_parcel[active_parcel_idx]
+               * (tau[active_parcel_idx]/self._fluid_density)**(3/2)
+               / (Rhoarray[active_parcel_idx]/self._fluid_density -1)
+               / self._g
+        ) # (m2/s) Yager A26
+
+        self._pvelocity[active_parcel_idx]=(
+            qbi
+            /active_layer_thickness_array[active_parcel_idx]
+        ) # (m/s)
 
         # # compute parcel virtual velocity, m/s 
         # self._pvelocity[active_parcel_idx] = (
@@ -1512,6 +1855,60 @@ def _calculate_parcel_grain_diameter_post_abrasion(
     return abraded_grain_diameter
 
 
+def _calculate_geometric_mean_grain_size(D_array, vol_array):
+    """Calculate the geometric mean grain size, given an array of
+    parcel grain diameters and associated parcel volumes. Returns NaN if there
+    are fewer than 3 parcels.
+
+    Parameters
+    ----------
+    D_array : array
+        Grain diameters
+    vol_array: array
+        Parcel volumes associated with D_array.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from numpy.testing import assert_almost_equal
+
+    If all grains are the same size, Dsg should be that size.
+    >>> D_array = np.array([2, 2, 2])
+    >>> vol_array = np.array([4, 1, 1])
+    >>> _calculate_geometric_mean_grain_size(D_array, vol_array)
+    2.0
+
+    Large parcels of small diameter, outlier large grain, D16 should be small.
+    >>> D_array = np.array([0.5, 0.5, 1, 1, 100])
+    >>> vol_array = np.array([4, 4, 0.1, 0.1, 0.1])
+    >>> _calculate_geometric_mean_grain_size(D_array, vol_array)
+    somenumber
+
+    Just one parcel.
+    >>> D_array = np.array([0.5])
+    >>> vol_array = np.array([1])
+    >>> _calculate_geometric_mean_grain_size(D_array, vol_array)
+    0.5
+
+    No parcels? D = nan.
+    >>> D_array = np.array([])
+    >>> vol_array = np.array([])
+    >>> _calculate_geometric_mean_grain_size(D_array, vol_array)
+    np.nan
+
+    """
+
+    if D_array.size > 0:  # if array has at least one value
+        Fi = vol_array/(np.sum(vol_array))
+        lnDsg = np.sum(Fi*np.log(D_array))
+        D_sg = np.exp(lnDsg)
+
+    else:
+        D_sg = np.nan
+
+    return D_sg
+
+
 def calculate_x_percentile_grain_size(D_array, vol_array, percentile):
     """Calculate the percentile grain size, e.g. D50, given an array of
     parcel grain diameters and associated parcel volumes. Returns NaN if there
@@ -1603,3 +2000,108 @@ def calculate_x_percentile_grain_size(D_array, vol_array, percentile):
         D_x = np.nan
 
     return D_x
+
+
+def _calculate_arithmetic_stdev(D_array,dgm,vol_array):
+    """Calculate the arithmetic standard deviation of grain size in phi units.
+
+    Parameters
+    ----------
+    D_array : array
+        Grain diameters
+    dgm : float
+        Geometric mean grain size.
+    vol_array: array
+        Parcel volumes associated with D_array.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from numpy.testing import assert_almost_equal
+
+    If all grains are the same size, Sigma should be XXX.
+    >>> D_array = np.array([2, 2, 2])
+    >>> dgm = 2.0
+    >>> vol_array = np.array([4, 1, 1])
+    >>> _calculate_arithmetic_stdev(D_array, dgm, vol_array)
+    0.0
+
+    Large parcels of small diameter, outlier large grain, D16 should be small.
+    >>> D_array = np.array([0.5, 0.5, 1, 1, 100])
+    >>> dgm = XXX
+    >>> vol_array = np.array([4, 4, 0.1, 0.1, 0.1])
+    >>> _calculate_arithmetic_stdev(D_array, dgm, vol_array)
+    XXX
+
+    Just one parcel.
+    >>> D_array = np.array([0.5])
+    >>> dgm = 0.5
+    >>> vol_array = np.array([1])
+    >>> _calculate_arithmetic_stdev(D_array, dgm, vol_array)
+    XXX
+
+    No parcels? D = nan.
+    >>> D_array = np.array([])
+    >>> dgm = []
+    >>> vol_array = np.array([])
+    >>> _calculate_arithmetic_stdev(D_array, dgm, vol_array)
+    np.nan
+
+    """
+
+    if D_array.size > 0:  # if array has at least one value
+        Fi = vol_array/(np.sum(vol_array))
+
+        # From Yager et al 2012, eqn A7
+        sigma2 = np.sum(Fi*(np.log(D_array/dgm)/np.log(2))**2) 
+        sigma = (sigma2)**(0.5)
+
+    else:
+        sigma = np.nan
+
+    return sigma
+
+
+
+def _compute_parker_straining(phi_gmo):
+    """Parker (1990) straining functions - see Parker ACRONYM paper for
+    table to interpolate from.
+
+    Parameters
+    ----------
+    phi_gmo : array
+        transport stage of the geometric mean grain size, 
+        tau*gm/tau*r.
+
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from numpy.testing import assert_almost_equal
+
+    According to table, if phi_gmo = 1...
+    >>> phi_gmo
+    >>> _compute_parker_straining(phi_gmo)
+    
+
+    """
+
+    phi_gm_array, omega_array, sigma_array = np.loadtxt(
+        'ParkerStrainingFunctions.csv', 
+        delimiter=',', 
+        skiprows=1, 
+        unpack=True
+        )
+
+    omega_o_straining = np.interp(
+        phi_gmo,
+        phi_gm_array,
+        omega_array, 
+        )
+    
+    sigma_o_straining = np.interp(
+        phi_gmo,
+        phi_gm_array,
+        sigma_array, 
+        )
+
+    return omega_o_straining, sigma_o_straining
