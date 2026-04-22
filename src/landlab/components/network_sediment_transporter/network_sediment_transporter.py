@@ -890,6 +890,7 @@ class NetworkSedimentTransporter(Component):
         Sarray = np.zeros(self._num_parcels)
         Harray = np.zeros(self._num_parcels)
         Larray = np.zeros(self._num_parcels)
+        Warray = np.zeros(self._num_parcels)
 
         D50_activearray = np.full(self._num_parcels, np.nan)
         active_layer_thickness_array = np.full(self._num_parcels, np.nan)
@@ -943,6 +944,7 @@ class NetworkSedimentTransporter(Component):
             Sarray[Linkarray == i] = self._grid.at_link["channel_slope"][i]
             Harray[Linkarray == i] = self._grid.at_link["flow_depth"][i]
             Larray[Linkarray == i] = self._grid.at_link["reach_length"][i]
+            Warray[Linkarray == i] = self._grid.at_link["channel_width"][i]
             active_layer_thickness_array[Linkarray == i] = self._active_layer_thickness[
                 i
             ]
@@ -955,7 +957,7 @@ class NetworkSedimentTransporter(Component):
         frac_parcel = np.nan * np.zeros_like(Volarray)
         frac_parcel[vol_act_array != 0.0] = (
             Volarray[vol_act_array != 0.0] / vol_act_array[vol_act_array != 0.0]
-        )
+        ) * Activearray[vol_act_array != 0.0]
 
         b = 0.67 / (1.0 + np.exp(1.5 - Darray / D50_activearray)) # WC Eqn 4
 
@@ -980,31 +982,35 @@ class NetworkSedimentTransporter(Component):
 
         active_parcel_idx = Activearray == _ACTIVE
 
+        # Calculate sediment fluxes
+        qbi = np.zeros(self._num_parcels)
 
-        # ALLISON CHECKING
-        qbi = (W.real[active_parcel_idx]
+        qbi[active_parcel_idx] = (W.real[active_parcel_idx]
                * frac_parcel[active_parcel_idx]
                * (tau[active_parcel_idx]/self._fluid_density)**(3/2)
                / (Rhoarray[active_parcel_idx]/self._fluid_density -1)
                / self._g
         ) # (m2/s) WC eqn 2
 
+        self._qbi = qbi 
+
+        self._frac_parcel = frac_parcel
+
+        qb = aggregate_items_as_sum(
+            self._parcels.dataset["element_id"].values[:, -1].astype(int),
+            qbi,
+            size=self._grid.number_of_links,
+        ) # total sediment flux per unit width, m2/s
+
+        self._qb = qb
+
         self._pvelocity[active_parcel_idx]=(
-            qbi
-            /active_layer_thickness_array[active_parcel_idx]
-        ) # (m/s)
+            Larray[active_parcel_idx]
+            *qbi[active_parcel_idx]
+            *Warray[active_parcel_idx]
+            / Volarray[active_parcel_idx] 
 
-
-        # # compute parcel virtual velocity, m/s 
-        # self._pvelocity[active_parcel_idx] = (
-        #     W.real[active_parcel_idx]
-        #     * (tau[active_parcel_idx] ** (3.0 / 2.0))
-        #     * frac_parcel[active_parcel_idx]
-        #     / (self._fluid_density ** (3.0 / 2.0))
-        #     / self._g
-        #     / R[active_parcel_idx]
-        #     / active_layer_thickness_array[active_parcel_idx]
-        # )
+        )# (m/s)# Bug fix 4/2026
 
         self._pvelocity[np.isnan(self._pvelocity)] = 0.0
 
