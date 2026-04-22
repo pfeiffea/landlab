@@ -49,7 +49,7 @@ def _node_out_link_ids(shape):
     Examples
     --------
     >>> from landlab.grid.raster_mappers import _node_out_link_ids
-    >>> (vert, horiz) = _node_out_link_ids((3, 4))
+    >>> vert, horiz = _node_out_link_ids((3, 4))
     >>> vert
     array([[ 3,  4,  5,  6],
            [10, 11, 12, 13],
@@ -94,7 +94,7 @@ def _node_in_link_ids(shape):
     Examples
     --------
     >>> from landlab.grid.raster_mappers import _node_in_link_ids
-    >>> (vert, horiz) = _node_in_link_ids((3, 4))
+    >>> vert, horiz = _node_in_link_ids((3, 4))
     >>> vert
     array([[-1, -1, -1, -1],
            [ 3,  4,  5,  6],

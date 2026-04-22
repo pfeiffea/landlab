@@ -450,14 +450,14 @@ class DepressionFinderAndRouter(Component):
         >>> z = rg.add_zeros("topographic__elevation", at="node")
         >>> z[4] = 2.0
         >>> df = DepressionFinderAndRouter(rg, routing="D4")
-        >>> (links, nbrs, dnbrs) = df._links_and_nbrs_at_node(4)
+        >>> links, nbrs, dnbrs = df._links_and_nbrs_at_node(4)
         >>> links
         array([6, 8, 5, 3])
         >>> nbrs
         array([5, 7, 3, 1])
         >>> dnbrs
         >>> df = DepressionFinderAndRouter(rg, routing="D8")
-        >>> (links, nbrs, dnbrs) = df._links_and_nbrs_at_node(4)
+        >>> links, nbrs, dnbrs = df._links_and_nbrs_at_node(4)
         >>> links
         array([6, 8, 5, 3])
         >>> nbrs
@@ -534,7 +534,7 @@ class DepressionFinderAndRouter(Component):
                [42, 43, 44, 45, 46, 47, 48]])
         """
 
-        (links, nbrs, diag_nbrs) = self._links_and_nbrs_at_node(outlet_node)
+        links, nbrs, diag_nbrs = self._links_and_nbrs_at_node(outlet_node)
 
         # Sweep through them, identifying the neighbor with the greatest slope.
         # We are probably duplicating some gradient calculations, but this only
@@ -1053,7 +1053,7 @@ class DepressionFinderAndRouter(Component):
             # Get unresolved "regular" neighbors of the current nodes
             for cn in nodes_being_processed:
                 # Get active and unresolved neighbors of cn
-                (nbrs, lnks) = self._find_unresolved_neighbors_new(
+                nbrs, lnks = self._find_unresolved_neighbors_new(
                     self._grid.adjacent_nodes_at_node[cn],
                     self._grid.links_at_node[cn],
                     self._receivers,
@@ -1077,7 +1077,7 @@ class DepressionFinderAndRouter(Component):
             if self._D8:
                 # Get unresolved "regular" neighbors of the current nodes
                 for cn in nodes_being_processed:
-                    (nbrs, diags) = self._find_unresolved_neighbors_new(
+                    nbrs, diags = self._find_unresolved_neighbors_new(
                         self._grid.diagonal_adjacent_nodes_at_node[cn],
                         self._grid.d8s_at_node[cn, 4:],
                         self._receivers,
