@@ -409,41 +409,6 @@ class NetworkSedimentTransporter(Component):
 
         self._partition_active_and_storage_layers()
         self._adjust_node_elevation()
-
-        ### Manually set head node elevs via sed thickness of downstream link
-        # these do not get updated in run_one_step
-        # #XXX Eric please help check syntax 
-
-        number_of_contributors = np.sum(
-            self._fd.flow_link_incoming_at_node() == 1, axis=1
-        )
-        
-        downstream_link_ids = self._fd.link_to_flow_receiving_node
-
-        for n in range(self._grid.number_of_nodes):
-            if number_of_contributors[n] == 0:  
-                downstream_link = downstream_link_ids[n]
-
-                width_of_downstream_links = self._grid.at_link["channel_width"][
-                    downstream_link
-                ]
-                length_of_downstream_links = self._grid.at_link["reach_length"][
-                    downstream_link
-                ]
-                volume_at_downstream_links = self._vol_stor[
-                    downstream_link
-                ]
-                alluvium__depth = (
-                    volume_at_downstream_links
-                    /length_of_downstream_links
-                    /width_of_downstream_links
-                    /(1 - self._bed_porosity)
-                )
-                
-                self._grid.at_node["topographic__elevation"][n] = (
-                    self._grid.at_node["bedrock__elevation"][n] + alluvium__depth
-                )
-
         self._update_channel_slopes()
 
     @property
@@ -726,61 +691,49 @@ class NetworkSedimentTransporter(Component):
             self._fd.flow_link_incoming_at_node() == 1, self._grid.links_at_node, -1
         )
 
-        vol_tot = self._vol_tot.copy()
+        # vol_tot = self._vol_tot.copy()
+
+        channel_width = self._grid.at_link["channel_width"]
+        reach_length = self._grid.at_link["reach_length"]
 
         # Update the node topographic elevations depending on the quantity of stored sediment
         for n in range(self._grid.number_of_nodes):
-            if number_of_contributors[n] > 0:  # we don't update head node elevations
-                upstream_links = upstream_contributing_links_at_node[n]
-                real_upstream_links = upstream_links[
-                    upstream_links != self._grid.BAD_INDEX
-                ]
-                width_of_upstream_links = self._grid.at_link["channel_width"][
-                    real_upstream_links
-                ]
-                length_of_upstream_links = self._grid.at_link["reach_length"][
-                    real_upstream_links
-                ]
+            downstream_link = downstream_link_id[n]
 
-                if downstream_link_id[n] == self._grid.BAD_INDEX:
-                    length_of_downstream_link = 0
-                    width_of_downstream_link = 0
+            upstream_links = upstream_contributing_links_at_node[n]
+            real_upstream_links = upstream_links[
+                upstream_links != self._grid.BAD_INDEX
+            ]
 
-                # #     # ignore ghost node parcels. Instead,
-                # #     # set "downstream" link attributes as upstream values 
-                #     length_of_downstream_link = self._grid.at_link["reach_length"][
-                #         real_upstream_links
-                #     ][0] # XXX WHY did I have to add [0] to get it to work  in Sklar? there's only one upstream
-                #     width_of_downstream_link = self._grid.at_link["channel_width"][
-                #         real_upstream_links
-                #     ][0]
-                # #     # XXX Check with Eric -- what if 2 upstream links? sum(voltot) didn't work
-                # #     print('vol_tot =', vol_tot)
-                # #     print('downstream_link_id = ', downstream_link_id)
-                # #     print('n = ', n)
-                #     vol_tot[downstream_link_id][n] = vol_tot[real_upstream_links][0]
-                    
+            if number_of_contributors[n] == 0: 
+                width_of_upstream_links = channel_width[downstream_link]
+                length_of_upstream_links = reach_length[downstream_link]
+            else: 
+                width_of_upstream_links = channel_width[real_upstream_links]
+                length_of_upstream_links = reach_length[real_upstream_links]
 
-                else:
-                    length_of_downstream_link = self._grid.at_link["reach_length"][
-                        downstream_link_id
-                    ][n]
-                    width_of_downstream_link = self._grid.at_link["channel_width"][
-                        downstream_link_id
-                    ][n]
+            if downstream_link == self._grid.BAD_INDEX:
+                # assign elevation based on upstream link volume (b/c no downstream exists)
+                volume_downstream = np.sum(self._vol_tot[upstream_links])
+                length_of_downstream_link = np.sum(reach_length[upstream_links])
+                width_of_downstream_link = np.sum(channel_width[upstream_links])
+            else:
+                volume_downstream = self._vol_tot[downstream_link]
+                length_of_downstream_link = reach_length[downstream_link]
+                width_of_downstream_link = channel_width[downstream_link]
+            
+            alluvium__depth = _calculate_alluvium_depth(
+                volume_downstream,
+                width_of_upstream_links,
+                length_of_upstream_links,
+                width_of_downstream_link,
+                length_of_downstream_link,
+                self._bed_porosity,
+            )
 
-                alluvium__depth = _calculate_alluvium_depth(
-                    vol_tot[downstream_link_id][n],
-                    width_of_upstream_links,
-                    length_of_upstream_links,
-                    width_of_downstream_link,
-                    length_of_downstream_link,
-                    self._bed_porosity,
-                )
-
-                self._grid.at_node["topographic__elevation"][n] = (
-                    self._grid.at_node["bedrock__elevation"][n] + alluvium__depth
-                )
+            self._grid.at_node["topographic__elevation"][n] = (
+                self._grid.at_node["bedrock__elevation"][n] + alluvium__depth
+            )
 
     def _calc_transport_wilcock_crowe(self) -> None:
         """Method to determine the transport time for each parcel in the active
