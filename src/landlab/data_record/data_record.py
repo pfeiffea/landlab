@@ -8,6 +8,7 @@ import xarray as xr
 from numpy.typing import ArrayLike
 from numpy.typing import NDArray
 from requireit import raise_as
+from requireit import require_array
 from requireit import require_contains
 from requireit import require_dtype
 from requireit import require_one_of
@@ -256,11 +257,11 @@ class DataRecord:
         if items is not None:
             if not isinstance(items, Mapping):
                 raise TypeError("items must be mapping")
-
             with raise_as(TypeError):
                 require_contains(
                     items, required=("grid_element", "element_id"), name="items"
                 )
+
             grid_elements = items["grid_element"]
             element_ids = items["element_id"]
 
@@ -325,11 +326,11 @@ class DataRecord:
 
     def _norm_time(self, time: ArrayLike) -> NDArray[np.floating]:
         time = np.atleast_1d(time)
-
         with raise_as(TypeError):
             require_dtype(time, dtype=float, allow_cast=True, name="time")
-        require_shape(time, shape=("n_times",), name="time")
-        require_sorted(time, strict=True, name="time")
+        with raise_as(ValueError):
+            require_shape(time, shape=("n_times",), name="time")
+            require_sorted(time, strict=True, name="time")
 
         return np.asarray(time, dtype=float)
 
@@ -378,40 +379,37 @@ class DataRecord:
             if np.any(invalid):
                 raise ValueError(f"invalid ids for grid element {at!r}.")
 
-    def add_record(self, time=None, item_id=None, new_item_loc=None, new_record=None):
-        """Add a new record to the DataRecord.
+    def add_record(
+        self,
+        time: ArrayLike | None = None,
+        item_id: ArrayLike | None = None,
+        new_item_loc: dict[str, Any] | None = None,
+        new_record: dict[str, Any] | None = None,
+    ) -> None:
+        """Add data to the DataRecord.
 
-        Unlike add_item, this method can support adding records that include
-        new variables to the DataRecord. It can also support adding records
-        that do not include time.
+        Append new values to existing variables in the DataRecord, optionally
+        at specified ``time`` and/or ``item_id`` coordinates. It can also
+        update the location of existing items.
 
         Parameters
         ----------
-        time : list or 1-D array of float or int
-            Time step at which the record is to be added.
-        item_id : list or 1-D array of int (optional)
-            ID of the item to which the new record relates.
-        new_item_loc: dict (optional)
-            Dictionary of the new item location. If the new record is a change
-            in the item location (grid_element and/or element_id), this field
-            must be provided as:
-
-            .. code-block:: python
-
-                {"grid_element": [grid_element], "element_id": [element_id]}
-
-            Both must be provided even if only one is being changed.
-
-        new_record : dict
-            Dictionary containing the new record. Structure should be:
-            {'variable_name_1' : (['dimensions'], variable_data_1)}
-            with:
-
-                - 'variable_name_1' : name of the (potentially new) variable
-                - ['dimensions'] : dimension(s) along which the new record
-                  varies; can be ['time'], ['item_id] or ['item_id', 'time']
-                - variable_data_1 : new data array, size must match the
-                  variable dimension(s)
+        time : array_like of float or int, optional
+            Time(s) at which to add data. Must be one-dimensional and strictly
+            increasing. Required if the DataRecord has a ``time`` dimension and
+            ``new_item_loc`` is provided. Must be ``None`` for time-independent
+            DataRecords.
+        item_id : array_like of int, optional
+            IDs of existing items to update. Must be one-dimensional. All values
+            must already exist in the DataRecord. Use :meth:`add_item` to create
+            new items.
+        new_item_loc : dict, optional
+            Mapping with keys ``"grid_element"`` and ``"element_id"`` specifying
+            updated locations for items. Both ``time`` and ``item_id`` must be
+            provided when using this argument.
+        new_record : dict, optional
+            Mapping of variable names to values to add. Values should be compatible
+            with the dimensions implied by ``time`` and/or ``item_id``.
 
         Examples
         --------
@@ -422,151 +420,106 @@ class DataRecord:
 
         Example of a DataRecord with dimensions time and item_id:
 
-        >>> my_items3 = {
-        ...     "grid_element": np.array([["node"], ["link"]]),
-        ...     "element_id": np.array([[1], [3]]),
+        >>> items = {
+        ...     "grid_element": [["node"], ["link"]],
+        ...     "element_id": [[1], [3]],
         ... }
 
         Note that both arrays have 2 dimensions as they vary along dimensions
         'time' and 'item_id'.
 
-        >>> dr3 = DataRecord(grid, time=[0.0], items=my_items3)
+        >>> dr = DataRecord(grid, time=0.0, items=items)
 
         Records relating to pre-existing items can be added to the DataRecord
         using the method 'add_record':
 
-        >>> dr3.add_record(
-        ...     time=[2.0],
-        ...     item_id=[0],
+        >>> dr.add_record(
+        ...     time=2.0,
+        ...     item_id=0,
         ...     new_item_loc={
-        ...         "grid_element": np.array([["node"]]),
-        ...         "element_id": np.array([[6]]),
+        ...         "grid_element": [["node"]],
+        ...         "element_id": [[6]],
         ...     },
-        ...     new_record={"item_size": (["item_id", "time"], np.array([[0.2]]))},
+        ...     new_record={"item_size": (["item_id", "time"], [[0.2]])},
         ... )
-        >>> dr3.dataset["element_id"].values
+        >>> dr.dataset["element_id"].values
         array([[ 1.,  6.],
                [ 3., nan]])
-        >>> dr3.get_data([2.0], [0], "item_size")
+        >>> dr.get_data([2.0], [0], "item_size")
         array([0.2])
 
         The 'add_record' method can also be used to add a non item-related
         record:
 
-        >>> dr3.add_record(time=[50.0], new_record={"mean_elev": (["time"], [110])})
-        >>> dr3.dataset["mean_elev"].to_dataframe()
+        >>> dr.add_record(time=50.0, new_record={"mean_elev": (("time",), [110])})
+        >>> dr.dataset["mean_elev"].to_dataframe()
               mean_elev
         time
         0.0         NaN
         2.0         NaN
         50.0      110.0
         """
-        if time is not None:
-            try:
-                # check that time is a dim of the DataRecord
-                self._dataset["time"]
-            except KeyError as exc:
-                raise KeyError("This DataRecord does not record time") from exc
+        if time is not None and "time" not in self._dataset:
+            raise KeyError("this DataRecord is time-independent; time must be None.")
+        if item_id is not None and "item_id" not in self._dataset:
+            raise KeyError("This DataRecord does not have an item_id dimension.")
+        if new_item_loc is not None and item_id is None:
+            raise ValueError("new_item_loc requires item_id.")
+        if new_item_loc is not None and time is None:
+            raise ValueError(
+                "new_item_loc requires time; use set_data() to change item locations"
+                " instead."
+            )
 
-            if not isinstance(time, (list, np.ndarray)):
-                # check input type
-                raise TypeError(
-                    "You have passed a time that is"
-                    " not permitted, must be list or array"
+        coords_to_add = {}
+        new_data_vars = {}
+
+        if item_id is not None:
+            item_id = np.atleast_1d(item_id)
+
+            require_dtype(item_id, dtype=np.intp, allow_cast=True)
+            require_shape(item_id, shape=("n_items",))
+
+            item_id = np.asarray(item_id, dtype=np.intp)
+
+            if not np.all(np.isin(item_id, self._dataset["item_id"].values)):
+                raise ValueError(
+                    "all item_id values must already exist in this DataRecord;"
+                    " use add_item() to add new items."
                 )
-            else:
-                if item_id is not None:
-                    try:
-                        # check that DataRecord holds items
-                        self._dataset["item_id"]
-                    except KeyError as exc:
-                        raise KeyError("This DataRecord does not hold items") from exc
-                    try:
-                        # check that item_id is list or array
-                        len(item_id)
-                    except TypeError as exc:
-                        raise TypeError("item_id must be a list or a 1D array") from exc
-                    if not all(i in self._dataset["item_id"].values for i in item_id):
-                        # check that item_id already exist
-                        raise ValueError(
-                            "One or more of the value(s) you "
-                            "passed as item_id is/are not "
-                            "currently in the DataRecord. Change"
-                            " the input values create a new item"
-                            "using the method add_item"
-                        )
-                    coords_to_add = {"time": np.array(time), "item_id": item_id}
 
-                    # if item location is changed by this new record, check
-                    # that both grid_element and element_id are provided:
-                    if new_item_loc is not None:
-                        try:
-                            new_grid_element = new_item_loc["grid_element"]
-                            new_element_id = new_item_loc["element_id"]
-                        except KeyError as exc:
-                            raise KeyError(
-                                "You must provide a "
-                                "new_item_loc dictionary with both "
-                                "grid_element and element_id"
-                            ) from exc
-                        # check that grid_element and element_id exist
-                        # on the grid and have valid format:
-                        new_grid_element, new_element_id = self._norm_elements_and_ids(
-                            new_grid_element, new_element_id
-                        )
+            coords_to_add["item_id"] = item_id
 
-                        # check that element IDs do not exceed number
-                        # of elements on this grid:
-                        self._check_element_ids(new_grid_element, new_element_id)
+        if time is not None:
+            coords_to_add["time"] = self._norm_time(time)
 
-                        _new_data_vars = {
-                            "grid_element": (["item_id", "time"], new_grid_element),
-                            "element_id": (["item_id", "time"], new_element_id),
-                        }
-                    else:
-                        # new_item_loc is `None`
-                        _new_data_vars = {}
-                else:
-                    # no item
-                    coords_to_add = {"time": np.array(time)}
-                    _new_data_vars = {}
+        if new_item_loc is not None:
+            with raise_as(KeyError):
+                require_contains(
+                    new_item_loc,
+                    required=("grid_element", "element_id"),
+                    name="new_item_loc",
+                )
 
-        else:
-            # no time
-            if item_id is not None:
-                if not all(i in self._dataset["item_id"].values for i in item_id):
-                    # check that item_id already exist
-                    raise ValueError(
-                        "One or more of the value(s) you "
-                        "passed as item_id is/are not "
-                        "currently in the DataRecord. Change"
-                        " the input values create a new item"
-                        "using the method add_item"
-                    )
+            new_grid_element = new_item_loc["grid_element"]
+            new_element_id = new_item_loc["element_id"]
 
-                coords_to_add = {"item_id": np.array(item_id)}
-                _new_data_vars = {}
+            new_grid_element, new_element_id = self._norm_elements_and_ids(
+                new_grid_element, new_element_id
+            )
+            self._check_element_ids(new_grid_element, new_element_id)
 
-                # no time so if item location needs to be changed,
-                # user should use set_data
-                if new_item_loc is not None:
-                    raise ValueError(
-                        "Use the method set_data to change the "
-                        "location of an item in this DataRecord"
-                    )
-            else:
-                # no item
-                _new_data_vars = {}
-                coords_to_add = {}
+            dims = tuple(dim for dim in ("item_id", "time") if dim in coords_to_add)
+            new_data_vars = {
+                "grid_element": (dims, new_grid_element),
+                "element_id": (dims, new_element_id),
+            }
 
         if new_record is not None:
-            # add new_record to dict of variables to add
-            _new_data_vars.update(new_record)
+            new_data_vars.update(new_record)
 
-        # create dataset of new record
-        ds_to_add = xr.Dataset(data_vars=_new_data_vars, coords=coords_to_add)
+        ds_to_add = xr.Dataset(data_vars=new_data_vars, coords=coords_to_add)
 
-        # merge new record and original dataset
         self._dataset = xr.merge((self._dataset, ds_to_add), compat="no_conflicts")
 
     def add_item(
@@ -707,22 +660,23 @@ class DataRecord:
         self._dataset = xr.merge((self._dataset, ds_to_add), compat="no_conflicts")
 
     def get_data(self, time=None, item_id=None, data_variable=None):
-        """Get the value of a variable at a model time and/or for an item.
+        """Return values of a variable at a given time and/or for selected items.
 
         Parameters
         ----------
-        time : list or 1-D array of float or int (optional)
-            The time coordinate of the record to get.
-        item_id : list or 1-D array of int (optional)
-            The item id of the record to get.
-        data_variable : string
-            The label of the variable to get.
+        time : array_like of float or int, optional
+            Time coordinate to select. Must be length 1 if provided.
+        item_id : array_like of int, optional
+            Indices of items to select.
+        data_variable : str
+            Name of the variable to retrieve.
 
         Returns
         -------
-        object
-            The value of *variable* at *time* and/or for *item_id*. The type of
-            the returned object is dependent on the type of the variable value.
+        ndarray
+            Values of *data_variable* after applying any provided selections. The
+            shape depends on the dimensions of the variable and the selections
+            applied.
 
         Examples
         --------
@@ -731,95 +685,59 @@ class DataRecord:
         >>> from landlab.data_record import DataRecord
         >>> grid = RasterModelGrid((3, 3))
 
-        Example of a DataRecord with dimensions time and item_id:
-
-        >>> my_items4 = {
+        >>> items = {
         ...     "grid_element": "node",
         ...     "element_id": np.array([[1], [3], [3], [7]]),
         ... }
-
-        Note that both arrays have 2 dimensions as they vary along dimensions
-        'time' and 'item_id'.
-
-        >>> my_data4 = {
+        >>> data = {
         ...     "item_size": (
         ...         ["item_id", "time"],
         ...         np.array([[0.3], [0.4], [0.8], [0.4]]),
         ...     )
         ... }
-        >>> dr4 = DataRecord(grid, time=[50.0], items=my_items4, data_vars=my_data4)
-        >>> dr4.get_data([50.0], [2], "element_id")
+        >>> dr = DataRecord(grid, time=[50.0], items=items, data_vars=data)
+
+        Select by time and item_id:
+        >>> dr.get_data(time=[50.0], item_id=[2], data_variable="element_id")
         array([3])
-        >>> dr4.get_data(time=[50.0], data_variable="item_size")
+
+        Select all items at a time:
+        >>> dr.get_data(time=[50.0], data_variable="item_size")
         array([0.3, 0.4, 0.8, 0.4])
-        >>> dr4.get_data(item_id=[1, 2], data_variable="grid_element")
+
+        Select items without time:
+        >>> dr.get_data(item_id=[1, 2], data_variable="grid_element")
         array([['node'], ['node']], dtype='<U6')
         """
-        try:
-            self._dataset[data_variable]
-        except KeyError as exc:
-            raise KeyError(
-                f"the variable {data_variable!r} is not in the DataRecord"
-            ) from exc
-        if time is None:
-            if item_id is None:
-                return self._dataset[data_variable].values
-            else:
-                try:
-                    self._dataset["item_id"]
-                except KeyError as exc:
-                    raise KeyError("This DataRecord does not hold items") from exc
-                try:
-                    len(item_id)
-                except TypeError as exc:
-                    raise TypeError("item_id must be a list or a 1-D array") from exc
-                try:
-                    self._dataset["item_id"].values[item_id]
-                except IndexError as exc:
-                    raise IndexError(
-                        "The item_id you passed does not exist " "in this DataRecord"
-                    ) from exc
+        if data_variable is None:
+            raise ValueError("data_variable must not be None")
 
-                return self._dataset.isel(item_id=item_id)[data_variable].values
+        with raise_as(KeyError):
+            require_contains(self._dataset, required=(data_variable,), name="dataset")
 
-        else:  # time is not None
-            try:
-                self._dataset["time"]
-            except KeyError as exc:
-                raise KeyError("This DataRecord does not record time") from exc
-            try:
-                len(time)
-            except TypeError as exc:
-                raise TypeError("time must be a list or a 1-D array") from exc
-            try:
-                time_index = int(self.time_coordinates.index(time[0]))
-            except ValueError as exc:
-                raise IndexError(
-                    "The time you passed is not currently"
-                    " in the DataRecord, you must change the value"
-                    " you pass or first create the new time "
-                    " coordinate using the add_record method"
-                ) from exc
-            if item_id is None:
-                return self._dataset.isel(time=time_index)[data_variable].values
-            else:
-                try:
-                    self._dataset["item_id"]
-                except KeyError as exc:
-                    raise KeyError("This DataRecord does not hold items") from exc
-                try:
-                    len(item_id)
-                except TypeError as exc:
-                    raise TypeError("item_id must be a list or a 1-D array") from exc
-                try:
-                    self._dataset["item_id"].values[item_id]
-                except IndexError as exc:
-                    raise IndexError(
-                        "The item_id you passed does not exist " "in this DataRecord"
-                    ) from exc
-                return self._dataset.isel(time=time_index, item_id=item_id)[
-                    data_variable
-                ].values
+        required = ()
+        if item_id is not None:
+            required += ("item_id",)
+        if time is not None:
+            required += ("time",)
+
+        with raise_as(KeyError):
+            require_contains(self._dataset.coords, required=required, name="dataset")
+
+        data = self._dataset[data_variable]
+
+        selectors = {}
+        if time is not None:
+            time = require_array(np.atleast_1d(time), dtype=np.number, shape=(1,))
+            selectors["time"] = _find_time(time[0], self._dataset["time"])
+
+        if item_id is not None:
+            selectors["item_id"] = _norm_item_id(item_id, self._dataset["item_id"])
+
+        if selectors:
+            data = data.isel(**selectors)
+
+        return data.values
 
     def set_data(self, time=None, item_id=None, data_variable=None, new_value=np.nan):
         """Set a variable value at a model time and/or an item to a new value.
@@ -1383,3 +1301,71 @@ def norm_grid_element(
         raise ValueError("elements must contain valid locations for this grid type.")
 
     return elements
+
+
+def _find_time(time: float | int, times: ArrayLike) -> int:
+    """Find the index of a time value in an array of times.
+
+    Parameters
+    ----------
+    time : float or int
+        Time value to locate.
+    times : array_like of float or int
+        Array of times to search.
+
+    Returns
+    -------
+    int
+        Index of the matching time in ``times``.
+
+    Notes
+    -----
+    Floating-point times are matched with ``numpy.isclose``. Integer times are
+    matched with exact equality.
+
+    Examples
+    --------
+    >>> _find_time(2, [0, 1, 2, 3])
+    2
+
+    >>> _find_time(2.0, [0.0, 1.0, 2.0, 3.0])
+    2
+    """
+    times = np.asarray(times)
+
+    require_shape(times, shape=("n_times",), name="times")
+    with raise_as(TypeError):
+        require_dtype(times, dtype=np.number, name="times")
+
+    time_is_float = np.issubdtype(np.asarray(time).dtype, np.floating)
+    times_is_float = np.issubdtype(times.dtype, np.floating)
+
+    if time_is_float or times_is_float:
+        matches = np.isclose(times, time)
+    else:
+        matches = times == time
+
+    n_matches = np.count_nonzero(matches)
+    if n_matches == 0:
+        raise IndexError("time does not match any of the provided times")
+    if n_matches > 1:
+        raise IndexError("time matches more than one of the provided times")
+
+    return int(np.flatnonzero(matches)[0])
+
+
+def _norm_item_id(item_id: ArrayLike, values: ArrayLike) -> int:
+    item_id = np.asarray(np.atleast_1d(item_id))
+
+    require_shape(item_id, shape=("n_items",), name="item_id")
+    with raise_as(TypeError):
+        require_dtype(item_id, dtype=np.integer, name="item_id")
+
+    try:
+        values[item_id]
+    except IndexError as exc:
+        raise IndexError(
+            "The item_id you passed does not exist in this DataRecord"
+        ) from exc
+
+    return item_id
