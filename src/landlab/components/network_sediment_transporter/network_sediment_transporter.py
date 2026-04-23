@@ -477,7 +477,7 @@ class NetworkSedimentTransporter(Component):
         )
 
         self._d_mean_active = np.full(self.grid.number_of_links, np.nan)
-        
+
         for link in range(self.grid.number_of_links):
             mask_here = self._parcels.dataset.element_id.values[:, -1] == link
             mask_active = self._parcels.dataset.active_layer[:, -1] == 1
@@ -489,8 +489,8 @@ class NetworkSedimentTransporter(Component):
 
             # D_geometricmean calculation
             if parcel_D.size > 0:  # if array has at least one value
-                Fi = parcel_vol/(np.sum(parcel_vol))
-                lnDgm = np.sum(Fi*np.log(parcel_D))
+                Fi = parcel_vol / (np.sum(parcel_vol))
+                lnDgm = np.sum(Fi * np.log(parcel_D))
                 self._d_mean_active[link] = np.exp(lnDgm)
 
             else:
@@ -503,7 +503,7 @@ class NetworkSedimentTransporter(Component):
                 + " _d_mean_active= "
                 + str(self._d_mean_active)
             )
-        
+
         if np.any(np.asarray(self._d_mean_active > 2)):
             warnings.warn(
                 "NetworkSedimentTransporter: Maximum link D_mean_active "
@@ -753,8 +753,8 @@ class NetworkSedimentTransporter(Component):
             vol_act_tot_i: float = np.sum(vol_act_i)
 
             if d_act_i.size > 0:  # if array has at least one value
-                Fi = vol_act_i/(np.sum(vol_act_i))
-                lnDgm = np.sum(Fi*np.log(d_act_i))
+                Fi = vol_act_i / (np.sum(vol_act_i))
+                lnDgm = np.sum(Fi * np.log(d_act_i))
                 self._d_mean_active[i] = np.exp(lnDgm)
 
             else:
@@ -807,22 +807,23 @@ class NetworkSedimentTransporter(Component):
 
         # Calculate sediment fluxes
         qbi = np.zeros(self._num_parcels)
- 
-        qbi[active_parcel_idx] = (W.real[active_parcel_idx]
-               * frac_parcel[active_parcel_idx]
-               * (tau[active_parcel_idx]/self._fluid_density)**(3/2)
-               / (Rhoarray[active_parcel_idx]/self._fluid_density -1)
-               / self._g
-        ) # (m2/s) WC eqn 2
- 
+
+        qbi[active_parcel_idx] = (
+            W.real[active_parcel_idx]
+            * frac_parcel[active_parcel_idx]
+            * (tau[active_parcel_idx] / self._fluid_density) ** (3 / 2)
+            / (Rhoarray[active_parcel_idx] / self._fluid_density - 1)
+            / self._g
+        )  # (m2/s) WC eqn 2
+
         self._qbi = qbi
- 
-        self._pvelocity[active_parcel_idx]=(
+
+        self._pvelocity[active_parcel_idx] = (
             Larray[active_parcel_idx]
-            *qbi[active_parcel_idx]
-            *Warray[active_parcel_idx]
+            * qbi[active_parcel_idx]
+            * Warray[active_parcel_idx]
             / Volarray[active_parcel_idx]
-        )# (m/s)# Bug fix 4/2026
+        )  # (m/s)# Bug fix 4/2026
 
         self._pvelocity[np.isnan(self._pvelocity)] = 0.0
 
