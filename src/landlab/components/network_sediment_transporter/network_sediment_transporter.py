@@ -647,19 +647,21 @@ class NetworkSedimentTransporter(Component):
             real_upstream_links = upstream_links[
                 upstream_links != self._grid.BAD_INDEX
             ]
-
-            if number_of_contributors[n] == 0: 
-                width_of_upstream_links = channel_width[downstream_link]
+            
+            # Upstream links attributes
+            if number_of_contributors[n] == 0: # head node
                 length_of_upstream_links = reach_length[downstream_link]
+                width_of_upstream_links = channel_width[downstream_link]
             else: 
-                width_of_upstream_links = channel_width[real_upstream_links]
                 length_of_upstream_links = reach_length[real_upstream_links]
+                width_of_upstream_links = channel_width[real_upstream_links]
 
-            if downstream_link == self._grid.BAD_INDEX:
+            # Downstream link attributes
+            if downstream_link == self._grid.BAD_INDEX: # outlet node 
                 # assign elevation based on upstream link volume (b/c no downstream exists)
-                volume_downstream = np.sum(self._vol_tot[upstream_links])
-                length_of_downstream_link = np.sum(reach_length[upstream_links])
-                width_of_downstream_link = np.sum(channel_width[upstream_links])
+                volume_downstream = np.sum(self._vol_tot[real_upstream_links])
+                length_of_downstream_link = np.sum(reach_length[real_upstream_links])
+                width_of_downstream_link = np.sum(channel_width[real_upstream_links])
             else:
                 volume_downstream = self._vol_tot[downstream_link]
                 length_of_downstream_link = reach_length[downstream_link]
