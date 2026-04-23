@@ -2,11 +2,10 @@ import numpy as np
 from numpy.testing import assert_array_almost_equal
 from numpy.testing import assert_array_equal
 
-from landlab.data_record.aggregators import aggregate_items_as_sum
-
 from landlab.components import FlowDirectorSteepest
 from landlab.components import NetworkSedimentTransporter
 from landlab.data_record import DataRecord
+from landlab.data_record.aggregators import aggregate_items_as_sum
 from landlab.grid.network import NetworkModelGrid
 
 
@@ -126,7 +125,7 @@ def test_defined_parcel_transport():
         nst.run_one_step(dt)
         assert len(nst._distance_traveled_cumulative) == 1
         distance_traveled[int(t / dt)] = nst._distance_traveled_cumulative[0]
-    
+
     # Baseline: "by hand" calculation of W&C transport for link 1 (where parcel resides)
     S = np.abs(
         (
@@ -161,12 +160,12 @@ def test_defined_parcel_transport():
         (rhos / rho - 1) * g
     )  # single parcel, so qb = qbi
 
-    # TEST A: 
+    # TEST A:
     nst_qb = aggregate_items_as_sum(
         nst._parcels.dataset["element_id"].values[:, -1].astype(int),
         nst._qbi,
         size=nst._grid.number_of_links,
-    ) # total sediment flux per unit width, m2/s
+    )  # total sediment flux per unit width, m2/s
 
     # TEST B: transport via sum of parcel motion
     # nst._qb should match sum(parcel velocities * parcel volumes) / link length
