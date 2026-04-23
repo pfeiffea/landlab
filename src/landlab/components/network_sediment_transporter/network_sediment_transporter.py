@@ -507,13 +507,12 @@ class NetworkSedimentTransporter(Component):
 
             # Dgeometricmean calculation
             if parcel_D.size > 0:  # if array has at least one value
-                Fi = parcel_vol/(np.sum(parcel_vol))
-                lnDgm = np.sum(Fi*np.log(parcel_D))
+                Fi = parcel_vol / (np.sum(parcel_vol))
+                lnDgm = np.sum(Fi * np.log(parcel_D))
                 self._d_mean_active[link] = np.exp(lnDgm)
 
             else:
                 self._d_mean_active[link] = np.nan
-
 
         if np.any(np.asarray(self._d50_active < 0)):
 
@@ -522,7 +521,7 @@ class NetworkSedimentTransporter(Component):
                 + " D_50= "
                 + str(self._d50_active)
             )
-        
+
         if np.any(np.asarray(self._d_mean_active < 0)):
 
             raise ValueError(
@@ -530,7 +529,7 @@ class NetworkSedimentTransporter(Component):
                 + " _d_mean_active= "
                 + str(self._d_mean_active)
             )
-        
+
         if np.any(np.asarray(self._d50_active > 2)):
             warnings.warn(
                 "NetworkSedimentTransporter: Maximum link D50 "
@@ -779,8 +778,8 @@ class NetworkSedimentTransporter(Component):
             vol_act_tot_i: float = np.sum(vol_act_i)
 
             if d_act_i.size > 0:  # if array has at least one value
-                Fi = vol_act_i/(np.sum(vol_act_i))
-                lnDgm = np.sum(Fi*np.log(d_act_i))
+                Fi = vol_act_i / (np.sum(vol_act_i))
+                lnDgm = np.sum(Fi * np.log(d_act_i))
                 self._d_mean_active[i] = np.exp(lnDgm)
 
             else:
@@ -832,14 +831,15 @@ class NetworkSedimentTransporter(Component):
         # Calculate sediment fluxes
         qbi = np.zeros(self._num_parcels)
 
-        qbi[active_parcel_idx] = (W.real[active_parcel_idx]
-               * frac_parcel[active_parcel_idx]
-               * (tau[active_parcel_idx]/self._fluid_density)**(3/2)
-               / (Rhoarray[active_parcel_idx]/self._fluid_density -1)
-               / self._g
-        ) # (m2/s) WC eqn 2
+        qbi[active_parcel_idx] = (
+            W.real[active_parcel_idx]
+            * frac_parcel[active_parcel_idx]
+            * (tau[active_parcel_idx] / self._fluid_density) ** (3 / 2)
+            / (Rhoarray[active_parcel_idx] / self._fluid_density - 1)
+            / self._g
+        )  # (m2/s) WC eqn 2
 
-        self._qbi = qbi 
+        self._qbi = qbi
 
         self._frac_parcel = frac_parcel
 
@@ -847,17 +847,16 @@ class NetworkSedimentTransporter(Component):
             self._parcels.dataset["element_id"].values[:, -1].astype(int),
             qbi,
             size=self._grid.number_of_links,
-        ) # total sediment flux per unit width, m2/s
+        )  # total sediment flux per unit width, m2/s
 
         self._qb = qb
 
-        self._pvelocity[active_parcel_idx]=(
+        self._pvelocity[active_parcel_idx] = (
             Larray[active_parcel_idx]
-            *qbi[active_parcel_idx]
-            *Warray[active_parcel_idx]
-            / Volarray[active_parcel_idx] 
-
-        )# (m/s)# Bug fix 4/2026
+            * qbi[active_parcel_idx]
+            * Warray[active_parcel_idx]
+            / Volarray[active_parcel_idx]
+        )  # (m/s)# Bug fix 4/2026
 
         self._pvelocity[np.isnan(self._pvelocity)] = 0.0
 
@@ -988,21 +987,22 @@ class NetworkSedimentTransporter(Component):
             (1 - (0.894 / np.sqrt(tautaur_cplx.real[tautaur >= 1.35]))), 4.5
         )
 
-        self._Wstari = W # To allow check against WC fig
+        self._Wstari = W  # To allow check against WC fig
 
         active_parcel_idx = Activearray == _ACTIVE
 
         # Calculate sediment fluxes
         qbi = np.zeros(self._num_parcels)
 
-        qbi[active_parcel_idx] = (W.real[active_parcel_idx]
-               * frac_parcel[active_parcel_idx]
-               * (tau[active_parcel_idx]/self._fluid_density)**(3/2)
-               / (Rhoarray[active_parcel_idx]/self._fluid_density -1)
-               / self._g
-        ) # (m2/s) WC eqn 2
+        qbi[active_parcel_idx] = (
+            W.real[active_parcel_idx]
+            * frac_parcel[active_parcel_idx]
+            * (tau[active_parcel_idx] / self._fluid_density) ** (3 / 2)
+            / (Rhoarray[active_parcel_idx] / self._fluid_density - 1)
+            / self._g
+        )  # (m2/s) WC eqn 2
 
-        self._qbi = qbi 
+        self._qbi = qbi
 
         self._frac_parcel = frac_parcel
 
@@ -1010,17 +1010,16 @@ class NetworkSedimentTransporter(Component):
             self._parcels.dataset["element_id"].values[:, -1].astype(int),
             qbi,
             size=self._grid.number_of_links,
-        ) # total sediment flux per unit width, m2/s
+        )  # total sediment flux per unit width, m2/s
 
         self._qb = qb
 
-        self._pvelocity[active_parcel_idx]=(
+        self._pvelocity[active_parcel_idx] = (
             Larray[active_parcel_idx]
-            *qbi[active_parcel_idx]
-            *Warray[active_parcel_idx]
-            / Volarray[active_parcel_idx] 
-
-        )# (m/s)# Bug fix 4/2026
+            * qbi[active_parcel_idx]
+            * Warray[active_parcel_idx]
+            / Volarray[active_parcel_idx]
+        )  # (m/s)# Bug fix 4/2026
 
         self._pvelocity[np.isnan(self._pvelocity)] = 0.0
 

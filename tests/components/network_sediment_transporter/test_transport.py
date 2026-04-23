@@ -63,7 +63,7 @@ def test_defined_parcel_transport():
     nmg_constant_slope.at_link["channel_slope"] = [0.01, 0.01, 0.01]
     nmg_constant_slope.at_link["reach_length"] = reach_length * np.ones(
         nmg_constant_slope.size("link")
-    )# m
+    )  # m
     nmg_constant_slope.at_link["channel_width"] = 15 * np.ones(
         nmg_constant_slope.size("link")
     )
@@ -82,7 +82,7 @@ def test_defined_parcel_transport():
     abrasion_rate = np.array([0])
     D = 0.05
     rhos = 2650
-    parcel_grid_element = 1 # place parcel on link 1
+    parcel_grid_element = 1  # place parcel on link 1
 
     items = {"grid_element": "link", "element_id": np.array([[parcel_grid_element]])}
 
@@ -126,56 +126,54 @@ def test_defined_parcel_transport():
         distance_traveled[int(t / dt)] = nst._distance_traveled_cumulative[0]
 
     # TEST A: "by hand" calculation of W&C transport for link 1 (where parcel resides)
-    S = np.abs((nmg_constant_slope.at_node["bedrock__elevation"][2]
-        -nmg_constant_slope.at_node["bedrock__elevation"][1])
-        /(x_of_node[2]-x_of_node[1])
+    S = np.abs(
+        (
+            nmg_constant_slope.at_node["bedrock__elevation"][2]
+            - nmg_constant_slope.at_node["bedrock__elevation"][1]
         )
-    h = nmg_constant_slope.at_link["flow_depth"][parcel_grid_element] 
-    w = nmg_constant_slope.at_link["channel_width"][parcel_grid_element] 
+        / (x_of_node[2] - x_of_node[1])
+    )
+    h = nmg_constant_slope.at_link["flow_depth"][parcel_grid_element]
+    w = nmg_constant_slope.at_link["channel_width"][parcel_grid_element]
     g = 9.81
     rho = 1000
 
-    tau = rho*g*h*S
-    #tau_star_rm = rho/
+    tau = rho * g * h * S
+    # tau_star_rm = rho/
 
-    tau_star_rm = 0.036 # no sand reference Shields
+    tau_star_rm = 0.036  # no sand reference Shields
 
-    tau_rm = tau_star_rm*(rhos-rho)*g*D # reference *shear*
+    tau_rm = tau_star_rm * (rhos - rho) * g * D  # reference *shear*
 
-    tau_ri = tau_rm # uniform D hiding function goes to 1
+    tau_ri = tau_rm  # uniform D hiding function goes to 1
 
-    phi = tau/tau_ri # 
+    phi = tau / tau_ri  #
 
     # phi > 1.35
-    Wstar= 14 * (1 - 0.894/np.sqrt(phi))**4.5
+    Wstar = 14 * (1 - 0.894 / np.sqrt(phi)) ** 4.5
 
-    ustar = np.sqrt(tau/rho)
+    ustar = np.sqrt(tau / rho)
 
     # qb calc per unit width, should match nst._qb
-    qb_calc = ((Wstar*(ustar**3))
-        /((rhos/rho - 1)*g
-            )
-        ) # single parcel, so qb = qbi
+    qb_calc = (Wstar * (ustar**3)) / (
+        (rhos / rho - 1) * g
+    )  # single parcel, so qb = qbi
 
     # TEST B: transport via sum of parcel motion
     # nst._qb should match sum(parcel velocities * parcel volumes) / link length
 
-    Qb_parcelmotion = (np.sum(nst._pvelocity*initial_volume)
-                    /nmg_constant_slope.at_link["reach_length"][parcel_grid_element]
-                    )
+    Qb_parcelmotion = (
+        np.sum(nst._pvelocity * initial_volume)
+        / nmg_constant_slope.at_link["reach_length"][parcel_grid_element]
+    )
 
-    qb_parcelmotion = Qb_parcelmotion/w
+    qb_parcelmotion = Qb_parcelmotion / w
 
-    # ASSERT these three are equal 
+    # ASSERT these three are equal
 
-    assert_array_almost_equal(
-            nst._qb[parcel_grid_element], qb_calc, decimal=7
-        )
-    
-    assert_array_almost_equal(
-            nst._qb[parcel_grid_element], qb_parcelmotion, decimal=7
-        )
+    assert_array_almost_equal(nst._qb[parcel_grid_element], qb_calc, decimal=7)
 
+    assert_array_almost_equal(nst._qb[parcel_grid_element], qb_parcelmotion, decimal=7)
 
 
 def test_defined_parcel_transport_WCd50():
@@ -193,7 +191,7 @@ def test_defined_parcel_transport_WCd50():
     nmg_constant_slope.at_link["channel_slope"] = [0.01, 0.01, 0.01]
     nmg_constant_slope.at_link["reach_length"] = reach_length * np.ones(
         nmg_constant_slope.size("link")
-    )# m
+    )  # m
     nmg_constant_slope.at_link["channel_width"] = 15 * np.ones(
         nmg_constant_slope.size("link")
     )
@@ -212,7 +210,7 @@ def test_defined_parcel_transport_WCd50():
     abrasion_rate = np.array([0])
     D = 0.05
     rhos = 2650
-    parcel_grid_element = 1 # place parcel on link 1
+    parcel_grid_element = 1  # place parcel on link 1
 
     items = {"grid_element": "link", "element_id": np.array([[parcel_grid_element]])}
 
@@ -256,52 +254,51 @@ def test_defined_parcel_transport_WCd50():
         distance_traveled[int(t / dt)] = nst._distance_traveled_cumulative[0]
 
     # TEST A: "by hand" calculation of W&C transport for link 1 (where parcel resides)
-    S = np.abs((nmg_constant_slope.at_node["bedrock__elevation"][2]
-        -nmg_constant_slope.at_node["bedrock__elevation"][1])
-        /(x_of_node[2]-x_of_node[1])
+    S = np.abs(
+        (
+            nmg_constant_slope.at_node["bedrock__elevation"][2]
+            - nmg_constant_slope.at_node["bedrock__elevation"][1]
         )
-    h = nmg_constant_slope.at_link["flow_depth"][parcel_grid_element] 
-    w = nmg_constant_slope.at_link["channel_width"][parcel_grid_element] 
+        / (x_of_node[2] - x_of_node[1])
+    )
+    h = nmg_constant_slope.at_link["flow_depth"][parcel_grid_element]
+    w = nmg_constant_slope.at_link["channel_width"][parcel_grid_element]
     g = 9.81
     rho = 1000
 
-    tau = rho*g*h*S
-    #tau_star_rm = rho/
+    tau = rho * g * h * S
+    # tau_star_rm = rho/
 
-    tau_star_rm = 0.036 # no sand reference Shields
+    tau_star_rm = 0.036  # no sand reference Shields
 
-    tau_rm = tau_star_rm*(rhos-rho)*g*D # reference *shear*
+    tau_rm = tau_star_rm * (rhos - rho) * g * D  # reference *shear*
 
-    tau_ri = tau_rm # uniform D hiding function goes to 1
+    tau_ri = tau_rm  # uniform D hiding function goes to 1
 
-    phi = tau/tau_ri # 
+    phi = tau / tau_ri  #
 
     # phi > 1.35
-    Wstar= 14 * (1 - 0.894/np.sqrt(phi))**4.5
+    Wstar = 14 * (1 - 0.894 / np.sqrt(phi)) ** 4.5
 
-    ustar = np.sqrt(tau/rho)
+    ustar = np.sqrt(tau / rho)
 
     # qb calc per unit width, should match nst._qb
-    qb_calc = ((Wstar*(ustar**3))
-        /((rhos/rho - 1)*g
-            )
-        ) # single parcel, so qb = qbi
+    qb_calc = (Wstar * (ustar**3)) / (
+        (rhos / rho - 1) * g
+    )  # single parcel, so qb = qbi
 
     # TEST B: transport via sum of parcel motion
     # nst._qb should match sum(parcel velocities * parcel volumes) / link length
 
-    Qb_parcelmotion = (np.sum(nst._pvelocity*initial_volume)
-                    /nmg_constant_slope.at_link["reach_length"][parcel_grid_element]
-                    )
+    Qb_parcelmotion = (
+        np.sum(nst._pvelocity * initial_volume)
+        / nmg_constant_slope.at_link["reach_length"][parcel_grid_element]
+    )
 
-    qb_parcelmotion = Qb_parcelmotion/w
+    qb_parcelmotion = Qb_parcelmotion / w
 
-    # ASSERT these three are equal 
+    # ASSERT these three are equal
 
-    assert_array_almost_equal(
-            nst._qb[parcel_grid_element], qb_calc, decimal=7
-        )
-    
-    assert_array_almost_equal(
-            nst._qb[parcel_grid_element], qb_parcelmotion, decimal=7
-        )
+    assert_array_almost_equal(nst._qb[parcel_grid_element], qb_calc, decimal=7)
+
+    assert_array_almost_equal(nst._qb[parcel_grid_element], qb_parcelmotion, decimal=7)
