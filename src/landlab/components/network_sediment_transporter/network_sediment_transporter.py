@@ -412,7 +412,7 @@ class NetworkSedimentTransporter(Component):
 
     @property
     def d_mean_active(self) -> float:
-        """Mean parcel grain size of active parcels aggregated at link."""
+        """Geometric mean parcel grain size of active parcels aggregated at link."""
         return self._d_mean_active
 
     @property
@@ -488,14 +488,9 @@ class NetworkSedimentTransporter(Component):
             size=self._grid.number_of_links,
         )
 
-        self._d_mean_active = aggregate_items_as_mean(
-            self._parcels.dataset["element_id"].values[:, -1].astype(int),
-            self._parcels.dataset["D"].values.reshape(-1),
-            weights=self._parcels.dataset["volume"].values[:, -1],
-            size=self._grid.number_of_links,
-        )
-
         self._d50_active = np.full(self.grid.number_of_links, np.nan)
+        self._d_mean_active = np.full(self.grid.number_of_links, np.nan)
+
         for link in range(self.grid.number_of_links):
             mask_here = self._parcels.dataset.element_id.values[:, -1] == link
             mask_active = self._parcels.dataset.active_layer[:, -1] == 1
@@ -505,9 +500,20 @@ class NetworkSedimentTransporter(Component):
             ]
             parcel_D = self._parcels.dataset.D.values[mask_here & mask_active, -1]
 
+            # D50 calculation
             self._d50_active[link] = calculate_x_percentile_grain_size(
                 parcel_D, parcel_vol, 50
             )
+
+            # Dgeometricmean calculation
+            if parcel_D.size > 0:  # if array has at least one value
+                Fi = parcel_vol/(np.sum(parcel_vol))
+                lnDgm = np.sum(Fi*np.log(parcel_D))
+                self._d_mean_active[link] = np.exp(lnDgm)
+
+            else:
+                self._d_mean_active[link] = np.nan
+
 
         if np.any(np.asarray(self._d50_active < 0)):
 
@@ -515,6 +521,21 @@ class NetworkSedimentTransporter(Component):
                 "NetworkSedimentTransporter: a calculated grain size is negative"
                 + " D_50= "
                 + str(self._d50_active)
+            )
+        
+        if np.any(np.asarray(self._d_mean_active < 0)):
+
+            raise ValueError(
+                "NetworkSedimentTransporter: a calculated grain size is negative"
+                + " _d_mean_active= "
+                + str(self._d_mean_active)
+            )
+        
+        if np.any(np.asarray(self._d50_active > 2)):
+            warnings.warn(
+                "NetworkSedimentTransporter: Maximum link D50 "
+                f" exceeds 2 m ({np.max(self._d50_active)})",
+                stacklevel=2,
             )
 
     def _partition_active_and_storage_layers(self, **kwds):
@@ -757,7 +778,14 @@ class NetworkSedimentTransporter(Component):
             rhos_act_i = Rhoarray[active_here]
             vol_act_tot_i: float = np.sum(vol_act_i)
 
-            self._d_mean_active[i] = np.sum(d_act_i * vol_act_i) / (vol_act_tot_i)
+            if d_act_i.size > 0:  # if array has at least one value
+                Fi = vol_act_i/(np.sum(vol_act_i))
+                lnDgm = np.sum(Fi*np.log(d_act_i))
+                self._d_mean_active[i] = np.exp(lnDgm)
+
+            else:
+                self._d_mean_active[i] = np.nan
+
             if vol_act_tot_i > 0:
                 self._rhos_mean_active[i] = np.sum(rhos_act_i * vol_act_i) / (
                     vol_act_tot_i
