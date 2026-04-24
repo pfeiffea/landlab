@@ -493,8 +493,9 @@ class NetworkSedimentTransporter(Component):
         if np.any(np.asarray(self._d_mean_active > 2)):
             warnings.warn(
                 "NetworkSedimentTransporter: Maximum link D_mean_active "
-                f" exceeds 2 m ({np.max(self._d_mean_active)})",UserWarning,
-                stacklevel=2, 
+                f" exceeds 2 m ({np.max(self._d_mean_active)})",
+                UserWarning,
+                stacklevel=2,
             )
 
     def _partition_active_and_storage_layers(self) -> None:
