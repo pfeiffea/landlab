@@ -622,20 +622,18 @@ class NetworkSedimentTransporter(Component):
             downstream_link = downstream_link_id[n]
 
             upstream_links = upstream_contributing_links_at_node[n]
-            real_upstream_links = upstream_links[
-                upstream_links != self._grid.BAD_INDEX
-            ]
-            
+            real_upstream_links = upstream_links[upstream_links != self._grid.BAD_INDEX]
+
             # Upstream links attributes
-            if number_of_contributors[n] == 0: # head node
+            if number_of_contributors[n] == 0:  # head node
                 length_of_upstream_links = reach_length[downstream_link]
                 width_of_upstream_links = channel_width[downstream_link]
-            else: 
+            else:
                 length_of_upstream_links = reach_length[real_upstream_links]
                 width_of_upstream_links = channel_width[real_upstream_links]
 
             # Downstream link attributes
-            if downstream_link == self._grid.BAD_INDEX: # outlet node 
+            if downstream_link == self._grid.BAD_INDEX:  # outlet node
                 # assign elevation based on upstream link volume (b/c no downstream exists)
                 volume_downstream = np.sum(self._vol_tot[real_upstream_links])
                 length_of_downstream_link = np.sum(reach_length[real_upstream_links])
@@ -644,7 +642,7 @@ class NetworkSedimentTransporter(Component):
                 volume_downstream = self._vol_tot[downstream_link]
                 length_of_downstream_link = reach_length[downstream_link]
                 width_of_downstream_link = channel_width[downstream_link]
-            
+
             alluvium__depth = _calculate_alluvium_depth(
                 volume_downstream,
                 width_of_upstream_links,
@@ -889,7 +887,7 @@ class NetworkSedimentTransporter(Component):
                 current_link[moving_downstream] = downstream_link[moving_downstream]
 
                 # find and address those links who have moved out of network.
-                #moved_oon = downstream_link == self._grid.BAD_INDEX
+                # moved_oon = downstream_link == self._grid.BAD_INDEX
                 in_outlet_link = downstream_link == self._grid.BAD_INDEX
 
                 moved_oon = moving_downstream * in_outlet_link
