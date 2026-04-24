@@ -924,10 +924,8 @@ class NetworkSedimentTransporter(Component):
                 # assign new values to current link.
                 current_link[moving_downstream] = downstream_link[moving_downstream]
 
-                # find and address those links who have moved out of network.
-                #moved_oon = downstream_link == self._grid.BAD_INDEX
+                # find and address those parcels who have moved out of network.
                 in_outlet_link = downstream_link == self._grid.BAD_INDEX
-
                 moved_oon = moving_downstream * in_outlet_link
 
                 if np.any(moved_oon):
