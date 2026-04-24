@@ -10,6 +10,7 @@ Gradient calculators for raster grids
     ~calc_grad_across_cell_faces
     ~calc_grad_across_cell_corners
 """
+
 from collections import deque
 
 import numpy as np
@@ -805,7 +806,7 @@ def _calc_subtriangle_unit_normals_at_node(grid, elevs="topographic__elevation")
     bad = np.nan
 
     # first, corners:
-    (northeast, northwest, southwest, southeast) = grid.nodes_at_corners_of_grid
+    northeast, northwest, southwest, southeast = grid.nodes_at_corners_of_grid
 
     # lower left corner only has NNE and ENE
     for array in (nhat_NNW, nhat_WNW, nhat_WSW, nhat_SSW, nhat_SSE, nhat_ESE):
@@ -1688,7 +1689,7 @@ def calc_grad_at_patch(
     >>> from landlab import RasterModelGrid
     >>> mg = RasterModelGrid((4, 5))
     >>> z = mg.node_y
-    >>> (x_grad, y_grad) = mg.calc_grad_at_patch(elevs=z)
+    >>> x_grad, y_grad = mg.calc_grad_at_patch(elevs=z)
     >>> np.allclose(y_grad, np.pi / 4.0)
     True
     >>> np.allclose(x_grad, 0.0)
@@ -1874,7 +1875,7 @@ def calc_slope_at_node(
         )
         slope_mag = np.mean(slopes_at_node_masked, axis=1).data
         if return_components:
-            (x_slope_patches, y_slope_patches) = grid.calc_grad_at_patch(
+            x_slope_patches, y_slope_patches = grid.calc_grad_at_patch(
                 elevs=elevs,
                 ignore_closed_nodes=ignore_closed_nodes,
                 subtriangle_unit_normals=(n_TR, n_TL, n_BL, n_BR),

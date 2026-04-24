@@ -267,7 +267,7 @@ def calc_grad_at_patch(
     >>> from landlab import RasterModelGrid
     >>> mg = RasterModelGrid((4, 5))
     >>> z = mg.node_y
-    >>> (x_grad, y_grad) = mg.calc_grad_at_patch(elevs=z)
+    >>> x_grad, y_grad = mg.calc_grad_at_patch(elevs=z)
     >>> np.allclose(y_grad, np.pi / 4.0)
     True
     >>> np.allclose(x_grad, 0.0)
@@ -411,7 +411,7 @@ def calc_slope_at_node(
     slope_mag = np.mean(slopes_at_node_masked, axis=1).data
 
     if return_components or method == "Horn":
-        (x_slope_patches, y_slope_patches) = grid.calc_grad_at_patch(
+        x_slope_patches, y_slope_patches = grid.calc_grad_at_patch(
             elevs=elevs,
             unit_normal=nhat,
             ignore_closed_nodes=ignore_closed_nodes,
