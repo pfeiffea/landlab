@@ -614,8 +614,6 @@ class NetworkSedimentTransporter(Component):
             self._fd.flow_link_incoming_at_node() == 1, self._grid.links_at_node, -1
         )
 
-        # vol_tot = self._vol_tot.copy()
-
         channel_width = self._grid.at_link["channel_width"]
         reach_length = self._grid.at_link["reach_length"]
 
