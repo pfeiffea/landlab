@@ -1,6 +1,7 @@
 import numpy as np
 from numpy.testing import assert_array_almost_equal
 from numpy.testing import assert_array_equal
+import pytest
 
 from landlab.components import FlowDirectorSteepest
 from landlab.components import NetworkSedimentTransporter
@@ -48,6 +49,27 @@ def test_no_flow_no_transport(example_nmg, example_parcels, example_flow_directo
         original_node_elev, example_nmg.at_node["topographic__elevation"]
     )
 
+def test_warn_parcels_so_big(example_nmg, example_parcels, example_flow_director):
+    timesteps = 3
+    example_nmg.at_link["flow_depth"] = np.ones(example_nmg.size("link"))
+
+    # Turn gravel to boulders...
+    example_parcels.dataset["D"].values = example_parcels.dataset["D"].values + 2 
+
+    dt = 2
+
+    with pytest.warns(UserWarning):
+
+        nst = NetworkSedimentTransporter(
+            example_nmg,
+            example_parcels,
+            example_flow_director,
+            bed_porosity=0.03,
+            g=9.81,
+            fluid_density=1000,
+        )
+        for _ in range(timesteps):
+            nst.run_one_step(dt)
 
 def test_defined_parcel_transport():
     y_of_node = (0, 0, 0, 0)

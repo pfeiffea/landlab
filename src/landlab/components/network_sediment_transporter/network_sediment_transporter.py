@@ -469,12 +469,6 @@ class NetworkSedimentTransporter(Component):
             weights=self._parcels.dataset["volume"].values[:, -1],
             size=self._grid.number_of_links,
         )
-        self._d_mean_active = aggregate_items_as_mean(
-            self._parcels.dataset["element_id"].values[:, -1].astype(int),
-            self._parcels.dataset["D"].values.reshape(-1),
-            weights=self._parcels.dataset["volume"].values[:, -1],
-            size=self._grid.number_of_links,
-        )
 
         self._d_mean_active = np.full(self.grid.number_of_links, np.nan)
 
@@ -496,19 +490,11 @@ class NetworkSedimentTransporter(Component):
             else:
                 self._d_mean_active[link] = np.nan
 
-        if np.any(np.asarray(self._d_mean_active < 0)):
-
-            raise ValueError(
-                "NetworkSedimentTransporter: a calculated grain size is negative"
-                + " _d_mean_active= "
-                + str(self._d_mean_active)
-            )
-
         if np.any(np.asarray(self._d_mean_active > 2)):
             warnings.warn(
                 "NetworkSedimentTransporter: Maximum link D_mean_active "
-                f" exceeds 2 m ({np.max(self._d_mean_active)})",
-                stacklevel=2,
+                f" exceeds 2 m ({np.max(self._d_mean_active)})",UserWarning,
+                stacklevel=2, 
             )
 
     def _partition_active_and_storage_layers(self) -> None:
