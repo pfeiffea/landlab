@@ -580,7 +580,7 @@ class NetworkSedimentTransporter(Component):
                 tau,
                 (self._rhos_mean_active - self._fluid_density)
                 * self._g
-                * self._d50_active,
+                * self._d_mean_active,
                 where=self._rhos_mean_active > self._fluid_density,
                 out=taustar,
             )
@@ -592,10 +592,10 @@ class NetworkSedimentTransporter(Component):
             # reduce instabilities related to small numbers of active parcels in
             # highly stable beds
             self._active_layer_thickness = np.maximum(
-                self._d50_active,
+                self._d_mean_active,
                 (
                     1.62
-                    * self._d50_active
+                    * self._d_mean_active
                     * (3.09 * (taustar - 0.036).clip(0.0, None) ** 0.56)
                 ),
             )
@@ -603,7 +603,7 @@ class NetworkSedimentTransporter(Component):
         elif self._active_layer_method == "GrainSizeDependent":
             # Set all active layers to a multiple of the link mean grain size
             self._active_layer_thickness = (
-                self._d50_active * self._active_layer_d_multiplier
+                self._d_mean_active * self._active_layer_d_multiplier
             )
 
         elif self._active_layer_method == "Constant10cm":
