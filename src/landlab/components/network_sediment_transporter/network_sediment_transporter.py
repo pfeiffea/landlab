@@ -490,10 +490,10 @@ class NetworkSedimentTransporter(Component):
             else:
                 self._d_mean_active[link] = np.nan
 
-        if np.any(np.asarray(self._d_mean_active > 2)):
+        largest_d = np.max(self._d_mean_active)
+        if largest_d > 2.0:
             warnings.warn(
-                "NetworkSedimentTransporter: Maximum link D_mean_active "
-                f" exceeds 2 m ({np.max(self._d_mean_active)})",
+                f"Maximum link D_mean_active exceeds 2 m ({largest_d})",
                 UserWarning,
                 stacklevel=2,
             )
