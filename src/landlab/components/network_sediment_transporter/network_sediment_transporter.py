@@ -21,6 +21,7 @@ from numpy.typing import NDArray
 
 from landlab.components.flow_director.flow_director_steepest import FlowDirectorSteepest
 from landlab.core.model_component import Component
+from landlab.data_record.aggregators import aggregate_items_as_gmean
 from landlab.data_record.aggregators import aggregate_items_as_mean
 from landlab.data_record.aggregators import aggregate_items_as_sum
 from landlab.data_record.data_record import DataRecord
@@ -389,6 +390,9 @@ class NetworkSedimentTransporter(Component):
         self.initialize_output_fields()
         self._channel_slope = self._grid.at_link["channel_slope"]
 
+        self._d_mean_active = np.full(self.grid.number_of_links, np.nan)
+        self._rhos_mean_active = np.full(self.grid.number_of_links, np.nan)
+
         # Adjust topographic elevation based on the parcels present.
         # Note that at present FlowDirector is just used for network connectivity.
         # get alluvium depth and calculate topography from br+alluvium, then update slopes.
@@ -463,34 +467,29 @@ class NetworkSedimentTransporter(Component):
 
     def _calculate_mean_D_and_rho(self) -> None:
         """Calculate mean grain size and density on each link"""
-        self._rhos_mean_active = aggregate_items_as_mean(
+        aggregate_items_as_mean(
             self._parcels.dataset["element_id"].values[:, -1].astype(int),
             self._parcels.dataset["density"].values.reshape(-1),
             weights=self._parcels.dataset["volume"].values[:, -1],
             size=self._grid.number_of_links,
+            out=self._rhos_mean_active,
         )
 
-        self._d_mean_active = np.full(self.grid.number_of_links, np.nan)
+        ids = self._parcels.dataset.element_id.values[:, -1]
+        parcel_diameter = self._parcels.dataset.D.values[:, -1]
+        parcel_volume = self._parcels.dataset.volume.values[:, -1]
+        is_active = self._parcels.dataset.active_layer[:, -1] == 1
 
-        for link in range(self.grid.number_of_links):
-            mask_here = self._parcels.dataset.element_id.values[:, -1] == link
-            mask_active = self._parcels.dataset.active_layer[:, -1] == 1
+        self._d_mean_active.fill(np.nan)
+        aggregate_items_as_gmean(
+            ids,
+            parcel_diameter,
+            weights=parcel_volume,
+            where=is_active,
+            out=self._d_mean_active,
+        )
 
-            parcel_vol = self._parcels.dataset.volume.values[
-                mask_here & mask_active, -1
-            ]
-            parcel_D = self._parcels.dataset.D.values[mask_here & mask_active, -1]
-
-            # D_geometricmean calculation
-            if parcel_D.size > 0:  # if array has at least one value
-                Fi = parcel_vol / (np.sum(parcel_vol))
-                lnDgm = np.sum(Fi * np.log(parcel_D))
-                self._d_mean_active[link] = np.exp(lnDgm)
-
-            else:
-                self._d_mean_active[link] = np.nan
-
-        largest_d = np.max(self._d_mean_active)
+        largest_d = np.nanmax(self._d_mean_active)
         if largest_d > 2.0:
             warnings.warn(
                 f"Maximum link D_mean_active exceeds 2 m ({largest_d})",
@@ -687,12 +686,7 @@ class NetworkSedimentTransporter(Component):
 
         # parcel attribute arrays from DataRecord
 
-        Darray = self._parcels.dataset.D[:, self._time_idx]
-        Activearray = self._parcels.dataset.active_layer[:, self._time_idx].values
         Rhoarray = self._parcels.dataset.density.values
-        Volarray = self._parcels.dataset.volume[:, self._time_idx].values
-        # link that the parcel is currently in
-        Linkarray = self._parcels.dataset.element_id[:, self._time_idx].values
 
         R = (Rhoarray - self._fluid_density) / self._fluid_density
 
@@ -729,23 +723,27 @@ class NetworkSedimentTransporter(Component):
         )
         frac_sand[np.isnan(frac_sand)] = 0.0
 
+        ids = self._parcels.dataset.element_id.values[:, -1]
+        parcel_diameter = self._parcels.dataset.D.values[:, -1]
+        parcel_volume = self._parcels.dataset.volume.values[:, -1]
+        is_active = self._parcels.dataset.active_layer[:, -1] == 1
+
+        self._d_mean_active.fill(np.nan)
+        aggregate_items_as_gmean(
+            ids,
+            parcel_diameter,
+            weights=parcel_volume,
+            where=is_active,
+            out=self._d_mean_active,
+        )
+
         # Calc attributes for each link, map to parcel arrays
         for i in range(self._grid.number_of_links):
-            active_here = np.nonzero(
-                np.logical_and(Linkarray == i, Activearray == _ACTIVE)
-            )[0]
-            d_act_i = Darray[active_here]
-            vol_act_i = Volarray[active_here]
+            this_link = ids == i
+            active_here = np.flatnonzero(this_link & is_active)
+            vol_act_i = parcel_volume[active_here]
             rhos_act_i = Rhoarray[active_here]
             vol_act_tot_i: float = np.sum(vol_act_i)
-
-            if d_act_i.size > 0:  # if array has at least one value
-                Fi = vol_act_i / (np.sum(vol_act_i))
-                lnDgm = np.sum(Fi * np.log(d_act_i))
-                self._d_mean_active[i] = np.exp(lnDgm)
-
-            else:
-                self._d_mean_active[i] = np.nan
 
             if vol_act_tot_i > 0:
                 self._rhos_mean_active[i] = np.sum(rhos_act_i * vol_act_i) / (
@@ -754,32 +752,30 @@ class NetworkSedimentTransporter(Component):
             else:
                 self._rhos_mean_active[i] = np.nan
 
-            D_mean_activearray[Linkarray == i] = self._d_mean_active[i]
-            frac_sand_array[Linkarray == i] = frac_sand[i]
-            vol_act_array[Linkarray == i] = self._vol_act[i]
-            Sarray[Linkarray == i] = self._grid.at_link["channel_slope"][i]
-            Harray[Linkarray == i] = self._grid.at_link["flow_depth"][i]
-            Larray[Linkarray == i] = self._grid.at_link["reach_length"][i]
-            Warray[Linkarray == i] = self._grid.at_link["channel_width"][i]
-            active_layer_thickness_array[Linkarray == i] = self._active_layer_thickness[
-                i
-            ]
+            D_mean_activearray[this_link] = self._d_mean_active[i]
+            frac_sand_array[this_link] = frac_sand[i]
+            vol_act_array[this_link] = self._vol_act[i]
+            Sarray[this_link] = self._grid.at_link["channel_slope"][i]
+            Harray[this_link] = self._grid.at_link["flow_depth"][i]
+            Larray[this_link] = self._grid.at_link["reach_length"][i]
+            Warray[this_link] = self._grid.at_link["channel_width"][i]
+            active_layer_thickness_array[this_link] = self._active_layer_thickness[i]
 
         # Wilcock and Crowe calculate transport for all parcels (active and inactive)
         taursg = _calculate_reference_shear_stress(
             self._fluid_density, R, self._g, D_mean_activearray, frac_sand_array
         )
 
-        frac_parcel = np.nan * np.zeros_like(Volarray)
+        frac_parcel = np.nan * np.zeros_like(parcel_volume)
         frac_parcel[vol_act_array != 0.0] = (
-            Volarray[vol_act_array != 0.0] / vol_act_array[vol_act_array != 0.0]
+            parcel_volume[vol_act_array != 0.0] / vol_act_array[vol_act_array != 0.0]
         )
 
-        b = 0.67 / (1.0 + np.exp(1.5 - Darray / D_mean_activearray))
+        b = 0.67 / (1.0 + np.exp(1.5 - parcel_diameter / D_mean_activearray))
 
         tau = np.atleast_1d(self._fluid_density * self._g * Harray * Sarray)
 
-        taur = taursg * (Darray / D_mean_activearray) ** b
+        taur = taursg * (parcel_diameter / D_mean_activearray) ** b
         tautaur = tau / taur
         self._tautaur = tautaur.copy()  # use below for xport dependent abrasion
         tautaur_cplx = tautaur.astype(np.complex128)
@@ -790,7 +786,7 @@ class NetworkSedimentTransporter(Component):
             (1 - (0.894 / np.sqrt(tautaur_cplx.real[tautaur >= 1.35]))), 4.5
         )
 
-        active_parcel_idx = Activearray == _ACTIVE
+        active_parcel_idx = is_active
 
         # Calculate sediment fluxes
         qbi = np.zeros(self._num_parcels)
@@ -809,7 +805,7 @@ class NetworkSedimentTransporter(Component):
             Larray[active_parcel_idx]
             * qbi[active_parcel_idx]
             * Warray[active_parcel_idx]
-            / Volarray[active_parcel_idx]
+            / parcel_volume[active_parcel_idx]
         )  # (m/s)# Bug fix 4/2026
 
         self._pvelocity[np.isnan(self._pvelocity)] = 0.0
