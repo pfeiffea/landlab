@@ -624,46 +624,48 @@ class NetworkSedimentTransporter(Component):
         """Adjusts slope for each link based on parcel motions from last
         timestep and additions from this timestep.
         """
-
-        number_of_contributors = np.sum(
-            self._fd.flow_link_incoming_at_node() == 1, axis=1
-        )
-        downstream_link_id = self._fd.link_to_flow_receiving_node
-
-        upstream_contributing_links_at_node = np.where(
-            self._fd.flow_link_incoming_at_node() == 1, self._grid.links_at_node, -1
-        )
-
         channel_width = self._grid.at_link["channel_width"]
         reach_length = self._grid.at_link["reach_length"]
+        elevation = self._grid.at_node["topographic__elevation"]
+        bedrock = self._grid.at_node["bedrock__elevation"]
+
+        is_incoming_link = self._fd.flow_link_incoming_at_node() == 1
+        downstream_link_id = self._fd.link_to_flow_receiving_node
+
+        number_of_contributors = np.sum(is_incoming_link, axis=1)
+
+        upstream_contributing_links_at_node = np.where(
+            is_incoming_link, self._grid.links_at_node, -1
+        )
+
+        is_head = number_of_contributors == 0
+        is_outlet = downstream_link_id == self._grid.BAD_INDEX
 
         # Update the node topographic elevations depending on the quantity of stored sediment
-        for n in range(self._grid.number_of_nodes):
-            downstream_link = downstream_link_id[n]
-
-            upstream_links = upstream_contributing_links_at_node[n]
-            real_upstream_links = upstream_links[upstream_links != self._grid.BAD_INDEX]
+        for node, downstream_link in enumerate(downstream_link_id):
+            upstream_links = upstream_contributing_links_at_node[node]
+            upstream_links = upstream_links[upstream_links != self._grid.BAD_INDEX]
 
             # Upstream links attributes
-            if number_of_contributors[n] == 0:  # head node
+            if is_head[node]:
                 length_of_upstream_links = reach_length[downstream_link]
                 width_of_upstream_links = channel_width[downstream_link]
             else:
-                length_of_upstream_links = reach_length[real_upstream_links]
-                width_of_upstream_links = channel_width[real_upstream_links]
+                length_of_upstream_links = reach_length[upstream_links]
+                width_of_upstream_links = channel_width[upstream_links]
 
             # Downstream link attributes
-            if downstream_link == self._grid.BAD_INDEX:  # outlet node
+            if is_outlet[node]:
                 # assign elevation based on upstream link volume (b/c no downstream exists)
-                volume_downstream = np.sum(self._vol_tot[real_upstream_links])
-                length_of_downstream_link = np.sum(reach_length[real_upstream_links])
-                width_of_downstream_link = np.sum(channel_width[real_upstream_links])
+                volume_downstream = np.sum(self._vol_tot[upstream_links])
+                length_of_downstream_link = np.sum(reach_length[upstream_links])
+                width_of_downstream_link = np.sum(channel_width[upstream_links])
             else:
                 volume_downstream = self._vol_tot[downstream_link]
                 length_of_downstream_link = reach_length[downstream_link]
                 width_of_downstream_link = channel_width[downstream_link]
 
-            alluvium__depth = _calculate_alluvium_depth(
+            alluvium_depth = _calculate_alluvium_depth(
                 volume_downstream,
                 width_of_upstream_links,
                 length_of_upstream_links,
@@ -672,9 +674,7 @@ class NetworkSedimentTransporter(Component):
                 self._bed_porosity,
             )
 
-            self._grid.at_node["topographic__elevation"][n] = (
-                self._grid.at_node["bedrock__elevation"][n] + alluvium__depth
-            )
+            elevation[node] = bedrock[node] + alluvium_depth
 
     def _calc_transport_wilcock_crowe(self) -> None:
         """Method to determine the transport time for each parcel in the active
